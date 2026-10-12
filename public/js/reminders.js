@@ -5,6 +5,8 @@
  */
 
 import { apiRequest } from './api.js';
+import { formatDate, escapeHtml, showToast, showConfirmModal } from './utils.js';
+import { getIcon } from './icons.js';
 
 let activeFilter = 'all';
 let cachedReminders = { upcoming: [], overdue: [], completed: [], reminders: [] };
@@ -14,92 +16,101 @@ export async function loadRemindersTab() {
     if (!container) return;
 
     container.innerHTML = `
-        <div style="max-width: 950px; margin: 0 auto; width: 100%;">
+        <div style="max-width: 950px; margin: 0 auto; width: 100%; padding: 1.25rem;">
             <!-- Header -->
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem;">
                 <div>
-                    <h2 style="font-size: 1.4rem; font-weight: 700;">⏰ Warranty & Return Reminders</h2>
-                    <p style="color: var(--text-muted); font-size: 0.88rem; margin-top: 0.25rem;">
+                    <h2 style="font-size: 1.4rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="color: var(--color-warning); display: flex;">${getIcon('bell', { size: 22 })}</span>
+                        Warranty & Return Reminders
+                    </h2>
+                    <p style="color: var(--color-text-muted); font-size: 0.88rem; margin-top: 0.2rem;">
                         Track gadget warranties, apparel exchange windows, and upcoming bills.
                     </p>
                 </div>
-                <button id="remBtnAddReminder" class="btn btn-primary" type="button">
-                    ➕ Add Reminder
+                <button id="remBtnAddReminder" class="btn btn-primary" type="button" style="display: inline-flex; align-items: center; gap: 0.35rem;">
+                    ${getIcon('plus', { size: 14 })} Add Reminder
                 </button>
             </div>
 
             <!-- Due Soon / Overdue Alert Banner -->
-            <div id="remDueAlertBanner" style="display: none; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-md); padding: 1rem; margin-bottom: 1.25rem;">
-                <div style="display: flex; align-items: center; gap: 0.5rem; color: #f87171; font-weight: 700; font-size: 0.95rem;">
-                    <span>⚠️</span> <span id="remDueAlertText">You have deadlines requiring immediate attention!</span>
+            <div id="remDueAlertBanner" style="display: none; background: var(--color-danger-subtle); border: 1px solid var(--color-danger); border-radius: var(--radius-md); padding: 1rem; margin-bottom: 1.25rem;">
+                <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-danger); font-weight: 700; font-size: 0.95rem;">
+                    <span aria-hidden="true" style="display: flex;">${getIcon('alert-triangle', { size: 16 })}</span>
+                    <span id="remDueAlertText">You have deadlines requiring immediate attention!</span>
                 </div>
-                <div id="remDueAlertList" style="margin-top: 0.5rem; font-size: 0.85rem; color: #fca5a5;"></div>
+                <div id="remDueAlertList" style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--color-danger);"></div>
             </div>
 
-            <!-- Filter Tabs -->
-            <div style="display: flex; gap: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem;">
-                <button class="chip-btn rem-filter-btn active" data-filter="all" type="button">
-                    All (<span id="remCountAll">0</span>)
-                </button>
-                <button class="chip-btn rem-filter-btn" data-filter="upcoming" type="button">
-                    🟢 Upcoming (<span id="remCountUpcoming">0</span>)
-                </button>
-                <button class="chip-btn rem-filter-btn" data-filter="overdue" type="button" style="color: #f87171;">
-                    🔴 Overdue (<span id="remCountOverdue">0</span>)
-                </button>
-                <button class="chip-btn rem-filter-btn" data-filter="completed" type="button">
-                    ✅ Completed (<span id="remCountCompleted">0</span>)
-                </button>
+            <!-- Filter Tabs as Segmented Control -->
+            <div style="margin-bottom: 1.25rem;">
+                <div class="segmented-control" id="remFilterSegmentedControl">
+                    <button class="segmented-item rem-filter-btn active" data-filter="all" type="button">
+                        All (<span id="remCountAll">0</span>)
+                    </button>
+                    <button class="segmented-item rem-filter-btn" data-filter="upcoming" type="button">
+                        <span style="color: var(--color-success); display: flex;">${getIcon('clock', { size: 13 })}</span>
+                        Upcoming (<span id="remCountUpcoming">0</span>)
+                    </button>
+                    <button class="segmented-item rem-filter-btn" data-filter="overdue" type="button" style="color: var(--color-danger);">
+                        <span style="color: var(--color-danger); display: flex;">${getIcon('alert-circle', { size: 13 })}</span>
+                        Overdue (<span id="remCountOverdue">0</span>)
+                    </button>
+                    <button class="segmented-item rem-filter-btn" data-filter="completed" type="button">
+                        <span style="color: var(--color-success); display: flex;">${getIcon('check-circle', { size: 13 })}</span>
+                        Completed (<span id="remCountCompleted">0</span>)
+                    </button>
+                </div>
             </div>
 
             <!-- Reminders List -->
             <div id="remindersListContainer" style="display: flex; flex-direction: column; gap: 0.85rem;">
-                <div style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading reminders...</div>
+                <div style="text-align: center; color: var(--color-text-muted); padding: 2rem;">Loading reminders...</div>
             </div>
         </div>
 
         <!-- Add / Edit Reminder Modal -->
-        <div class="modal-overlay" id="remModalOverlay" style="display: none;">
-            <div class="modal-dialog" style="max-width: 480px;">
+        <div class="modal-backdrop" id="remModalOverlay">
+            <div class="modal-window" style="max-width: 480px;">
                 <div class="modal-header">
-                    <h3 id="remModalTitle">Add Reminder</h3>
-                    <button class="modal-close-btn" id="remModalCloseBtn" type="button">&times;</button>
+                    <div class="modal-title" id="remModalTitle">Add Reminder</div>
+                    <button class="close-btn" id="remModalCloseBtn" type="button" aria-label="Close dialog">&times;</button>
                 </div>
                 <div class="modal-body">
                     <form id="remForm">
                         <input type="hidden" id="remInputId" value="">
                         <input type="hidden" id="remInputBillId" value="">
 
-                        <div class="form-group">
+                        <div class="form-group" style="margin-bottom: 0.85rem;">
                             <label class="form-label">Reminder Title *</label>
                             <input type="text" id="remInputTitle" class="form-control" placeholder="e.g. 1-Year Warranty: JBL Headphones" required>
                         </div>
 
-                        <div class="form-group">
+                        <div class="form-group" style="margin-bottom: 0.85rem;">
                             <label class="form-label">Type *</label>
                             <select id="remInputType" class="form-control">
-                                <option value="warranty">🛡️ Warranty Coverage</option>
-                                <option value="return_deadline">📦 Return / Exchange Window</option>
-                                <option value="bill_due">💳 Bill Due / Subscription</option>
-                                <option value="other">📝 Other Reminder</option>
+                                <option value="warranty">Warranty Coverage</option>
+                                <option value="return_deadline">Return / Exchange Window</option>
+                                <option value="bill_due">Bill Due / Subscription</option>
+                                <option value="other">Other Reminder</option>
                             </select>
                         </div>
 
-                        <div class="form-group">
+                        <div class="form-group" style="margin-bottom: 0.85rem;">
                             <label class="form-label">Due / Expiry Date *</label>
                             <input type="date" id="remInputDueDate" class="form-control" required>
                         </div>
 
-                        <div class="form-group">
+                        <div class="form-group" style="margin-bottom: 0.85rem;">
                             <label class="form-label">Notes & Details</label>
                             <textarea id="remInputNotes" class="form-control" rows="2" placeholder="e.g. Purchased at Croma with bill #CR-849"></textarea>
                         </div>
 
-                        <div id="remFormError" style="color: #ef4444; font-size: 0.85rem; margin-bottom: 0.75rem; display: none;"></div>
+                        <div id="remFormError" style="color: var(--color-danger); font-size: 0.85rem; margin-bottom: 0.75rem; display: none;"></div>
 
                         <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1rem;">
-                            <button type="button" class="btn btn-secondary" id="remBtnCancel">Cancel</button>
-                            <button type="submit" class="btn btn-primary" id="remBtnSave">Save Reminder</button>
+                            <button type="button" class="btn btn-secondary" id="remModalCancelBtn">Cancel</button>
+                            <button type="submit" class="btn btn-primary" id="remModalSaveBtn">Save Reminder</button>
                         </div>
                     </form>
                 </div>
@@ -107,91 +118,92 @@ export async function loadRemindersTab() {
         </div>
     `;
 
-    setupRemindersEvents();
-    await fetchAndRenderReminders();
-}
-
-function setupRemindersEvents() {
     // Filter clicks
-    const filterBtns = document.querySelectorAll('.rem-filter-btn');
-    filterBtns.forEach(btn => {
+    document.querySelectorAll('.rem-filter-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            filterBtns.forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.rem-filter-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            activeFilter = btn.dataset.filter || 'all';
+            activeFilter = btn.dataset.filter;
             renderRemindersList();
         });
     });
 
-    // Add reminder button
+    // Add button
     document.getElementById('remBtnAddReminder')?.addEventListener('click', () => {
         openReminderModal();
     });
 
-    // Modal close
+    // Modal buttons
     document.getElementById('remModalCloseBtn')?.addEventListener('click', closeReminderModal);
-    document.getElementById('remBtnCancel')?.addEventListener('click', closeReminderModal);
-
-    // Form submit
-    document.getElementById('remForm')?.addEventListener('submit', async (e) => {
+    document.getElementById('remModalCancelBtn')?.addEventListener('click', closeReminderModal);
+    document.getElementById('remForm')?.addEventListener('submit', (e) => {
         e.preventDefault();
-        await saveReminderForm();
+        saveReminderForm();
     });
+
+    await fetchAndRenderReminders();
 }
 
 async function fetchAndRenderReminders() {
+    const container = document.getElementById('remindersListContainer');
+    if (container) {
+        container.innerHTML = `
+            <div class="skeleton-box" style="height: 72px;"></div>
+            <div class="skeleton-box" style="height: 72px;"></div>
+            <div class="skeleton-box" style="height: 72px;"></div>
+        `;
+    }
+
     try {
-        const res = await apiRequest('/api/reminders');
-        cachedReminders = res || { upcoming: [], overdue: [], completed: [], reminders: [] };
+        const data = await apiRequest('/api/reminders');
+        cachedReminders = data;
 
         // Update counts
-        const counts = cachedReminders.counts || {};
-        const countAll = document.getElementById('remCountAll');
-        const countUp = document.getElementById('remCountUpcoming');
-        const countOver = document.getElementById('remCountOverdue');
-        const countComp = document.getElementById('remCountCompleted');
+        const allCount = (data.reminders || []).length;
+        const upCount = (data.upcoming || []).length;
+        const ovCount = (data.overdue || []).length;
+        const compCount = (data.completed || []).length;
 
-        if (countAll) countAll.textContent = counts.total || 0;
-        if (countUp) countUp.textContent = counts.upcoming || 0;
-        if (countOver) countOver.textContent = counts.overdue || 0;
-        if (countComp) countComp.textContent = counts.completed || 0;
+        const countAllEl = document.getElementById('remCountAll');
+        const countUpEl = document.getElementById('remCountUpcoming');
+        const countOvEl = document.getElementById('remCountOverdue');
+        const countCompEl = document.getElementById('remCountCompleted');
 
-        // Check due soon alerts
-        checkDueAlerts();
+        if (countAllEl) countAllEl.textContent = allCount;
+        if (countUpEl) countUpEl.textContent = upCount;
+        if (countOvEl) countOvEl.textContent = ovCount;
+        if (countCompEl) countCompEl.textContent = compCount;
 
-        // Render current filter
+        // Check due soon (within 7 days) and overdue
+        const dueSoon = data.due_soon || [];
+        const alertBanner = document.getElementById('remDueAlertBanner');
+        const alertList = document.getElementById('remDueAlertList');
+
+        if (dueSoon.length > 0 && alertBanner && alertList) {
+            alertBanner.style.display = 'block';
+            alertList.innerHTML = dueSoon.map(d => `
+                <div style="margin-top: 0.25rem;">
+                    <strong>${escapeHtml(d.title)}</strong> &bull; Due: ${formatDate(d.due_date)} 
+                    <span style="font-weight: 700;">(${d.days_remaining < 0 ? `${Math.abs(d.days_remaining)} days overdue` : (d.days_remaining === 0 ? 'Due Today!' : `In ${d.days_remaining} days`)})</span>
+                </div>
+            `).join('');
+        } else if (alertBanner) {
+            alertBanner.style.display = 'none';
+        }
+
         renderRemindersList();
     } catch (e) {
         console.error('Error fetching reminders:', e);
-        const container = document.getElementById('remindersListContainer');
         if (container) {
-            container.innerHTML = `<div style="color: #ef4444; padding: 1.5rem; text-align: center;">Failed to load reminders: ${escapeHtml(e.message || e)}</div>`;
+            container.innerHTML = `
+                <div style="padding: 2.5rem 1rem; text-align: center; color: var(--color-danger);">
+                    <p style="font-size: 0.9rem; margin-bottom: 0.75rem;">Failed to load reminders: ${escapeHtml(e.message || e)}</p>
+                    <button class="btn btn-secondary" onclick="window.loadReminders()" type="button" style="display: inline-flex; align-items: center; gap: 0.35rem; margin: 0 auto;">
+                        ${getIcon('refresh-cw', { size: 14 })} Retry
+                    </button>
+                </div>
+            `;
         }
-    }
-}
-
-async function checkDueAlerts() {
-    try {
-        const dueRes = await apiRequest('/api/reminders/due?days=7');
-        const dueList = dueRes.due_reminders || [];
-        const banner = document.getElementById('remDueAlertBanner');
-        const listEl = document.getElementById('remDueAlertList');
-
-        if (!banner || !listEl) return;
-
-        if (dueList.length > 0) {
-            banner.style.display = 'block';
-            listEl.innerHTML = dueList.map(d => {
-                const badge = d.days_remaining < 0 
-                    ? `<span style="font-weight: 700; color: #ef4444;">OVERDUE (${Math.abs(d.days_remaining)} days ago)</span>` 
-                    : (d.days_remaining === 0 ? `<span style="font-weight: 700; color: #fbbf24;">DUE TODAY</span>` : `<span style="font-weight: 600; color: #fcd34d;">Due in ${d.days_remaining} day${d.days_remaining === 1 ? '' : 's'}</span>`);
-                return `• <strong>${escapeHtml(d.title)}</strong> &bull; ${badge}`;
-            }).join('<br>');
-        } else {
-            banner.style.display = 'none';
-        }
-    } catch (e) {
-        console.warn('Could not check due alerts:', e);
     }
 }
 
@@ -212,11 +224,11 @@ function renderRemindersList() {
 
     if (items.length === 0) {
         container.innerHTML = `
-            <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 2.5rem; text-align: center; color: var(--text-muted);">
-                <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">⏰</div>
-                <h3 style="font-size: 1.1rem; font-weight: 700; color: #ffffff;">No Reminders in "${activeFilter}"</h3>
+            <div style="background: var(--color-surface-card); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 2.5rem; text-align: center; color: var(--color-text-muted);">
+                <div style="color: var(--color-primary); margin-bottom: 0.5rem; display: flex; justify-content: center;">${getIcon('bell', { size: 36 })}</div>
+                <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--color-text);">No Reminders in "${activeFilter}"</h3>
                 <p style="font-size: 0.88rem; margin-top: 0.25rem;">
-                    Click "➕ Add Reminder" or upload an electronics or clothing bill in chat to get automated suggestions.
+                    Click "+ Add Reminder" or upload an electronics or clothing bill in chat to get automated suggestions.
                 </p>
             </div>
         `;
@@ -232,9 +244,9 @@ function renderRemindersList() {
 
 function createReminderCard(rem) {
     const card = document.createElement('div');
-    card.style.background = 'var(--bg-surface)';
-    card.style.border = '1px solid var(--border)';
-    card.style.borderRadius = 'var(--radius-md)';
+    card.style.background = 'var(--color-surface-card)';
+    card.style.border = '1px solid var(--color-border)';
+    card.style.borderRadius = 'var(--radius-lg)';
     card.style.padding = '1.1rem';
     card.style.display = 'flex';
     card.style.justifyContent = 'space-between';
@@ -243,66 +255,66 @@ function createReminderCard(rem) {
     card.style.gap = '0.75rem';
 
     if (rem.is_overdue) {
-        card.style.borderLeft = '4px solid #ef4444';
+        card.style.borderLeft = '4px solid var(--color-danger)';
     } else if (rem.is_completed) {
-        card.style.opacity = '0.65';
-        card.style.borderLeft = '4px solid #10b981';
+        card.style.opacity = '0.7';
+        card.style.borderLeft = '4px solid var(--color-success)';
     } else {
-        card.style.borderLeft = '4px solid #6366f1';
+        card.style.borderLeft = '4px solid var(--color-primary)';
     }
 
     const typeBadges = {
-        warranty: `<span style="background: rgba(16, 185, 129, 0.15); color: #34d399; font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 4px;">🛡️ WARRANTY</span>`,
-        return_deadline: `<span style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 4px;">📦 RETURN WINDOW</span>`,
-        bill_due: `<span style="background: rgba(99, 102, 241, 0.2); color: #818cf8; font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 4px;">💳 BILL DUE</span>`,
-        other: `<span style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 4px;">📝 REMINDER</span>`,
+        warranty: `<span style="background: var(--color-success-subtle); color: var(--color-success); font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.25rem;">${getIcon('shield', { size: 12 })} WARRANTY</span>`,
+        return_deadline: `<span style="background: var(--color-warning-subtle); color: var(--color-warning); font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.25rem;">${getIcon('package', { size: 12 })} RETURN WINDOW</span>`,
+        bill_due: `<span style="background: var(--color-primary-subtle); color: var(--color-primary); font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.25rem;">${getIcon('credit-card', { size: 12 })} BILL DUE</span>`,
+        other: `<span style="background: var(--color-surface-raised); color: var(--color-text-muted); font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.25rem;">${getIcon('file-text', { size: 12 })} REMINDER</span>`,
     };
     const badgeHtml = typeBadges[rem.reminder_type] || typeBadges.other;
 
     let countdownText = '';
-    let countdownColor = '#a5b4fc';
+    let countdownColor = 'var(--color-primary)';
     if (rem.is_completed) {
-        countdownText = '✅ Completed';
-        countdownColor = '#34d399';
+        countdownText = 'Completed';
+        countdownColor = 'var(--color-success)';
     } else if (rem.is_overdue) {
         countdownText = `Overdue by ${Math.abs(rem.days_remaining)} day${Math.abs(rem.days_remaining) === 1 ? '' : 's'}`;
-        countdownColor = '#ef4444';
+        countdownColor = 'var(--color-danger)';
     } else if (rem.days_remaining === 0) {
-        countdownText = '⚠️ Due Today!';
-        countdownColor = '#fbbf24';
+        countdownText = 'Due Today!';
+        countdownColor = 'var(--color-warning)';
     } else {
         countdownText = `${rem.days_remaining} day${rem.days_remaining === 1 ? '' : 's'} remaining`;
-        countdownColor = rem.days_remaining <= 7 ? '#fbbf24' : '#a5b4fc';
+        countdownColor = rem.days_remaining <= 7 ? 'var(--color-warning)' : 'var(--color-primary)';
     }
 
-    const notesHtml = rem.notes ? `<div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 0.35rem;">${escapeHtml(rem.notes)}</div>` : '';
-    const merchantHtml = rem.merchant_name ? `<span style="color: var(--text-muted); font-size: 0.78rem;"> &bull; ${escapeHtml(rem.merchant_name)}</span>` : '';
+    const notesHtml = rem.notes ? `<div style="font-size: 0.82rem; color: var(--color-text-muted); margin-top: 0.35rem;">${escapeHtml(rem.notes)}</div>` : '';
+    const merchantHtml = rem.merchant_name ? `<span style="color: var(--color-text-muted); font-size: 0.78rem;"> • ${escapeHtml(rem.merchant_name)}</span>` : '';
 
     card.innerHTML = `
         <div style="flex: 1; min-width: 250px;">
             <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-                <input type="checkbox" class="rem-toggle-checkbox" data-id="${rem.id}" ${rem.is_completed ? 'checked' : ''} style="cursor: pointer; width: 1.1rem; height: 1.1rem;">
-                <strong style="color: #ffffff; font-size: 0.98rem; text-decoration: ${rem.is_completed ? 'line-through' : 'none'};">${escapeHtml(rem.title)}</strong>
+                <input type="checkbox" class="rem-toggle-checkbox" data-id="${rem.id}" ${rem.is_completed ? 'checked' : ''} style="cursor: pointer; width: 1.1rem; height: 1.1rem;" aria-label="Mark reminder completed">
+                <strong style="color: var(--color-text); font-size: 0.98rem; text-decoration: ${rem.is_completed ? 'line-through' : 'none'};">${escapeHtml(rem.title)}</strong>
                 ${badgeHtml}
             </div>
             ${notesHtml}
-            <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.25rem;">
-                Due Date: <strong style="color: #ffffff;">${formatDate(rem.due_date)}</strong>${merchantHtml}
+            <div style="font-size: 0.78rem; color: var(--color-text-muted); margin-top: 0.25rem;">
+                Due Date: <strong style="color: var(--color-text);">${formatDate(rem.due_date)}</strong>${merchantHtml}
             </div>
         </div>
 
         <div style="display: flex; align-items: center; gap: 1rem; text-align: right;">
             <div>
                 <div style="font-weight: 700; color: ${countdownColor}; font-size: 0.92rem;">${countdownText}</div>
-                <div style="font-size: 0.75rem; color: var(--text-muted);">${rem.is_completed ? 'Finished' : (rem.is_overdue ? 'Action Needed' : 'Active Coverage')}</div>
+                <div style="font-size: 0.75rem; color: var(--color-text-muted);">${rem.is_completed ? 'Finished' : (rem.is_overdue ? 'Action Needed' : 'Active Coverage')}</div>
             </div>
 
             <div style="display: flex; gap: 0.4rem;">
-                <button class="icon-btn rem-btn-edit" data-id="${rem.id}" type="button" title="Edit reminder" style="padding: 0.3rem 0.5rem; font-size: 0.85rem;">
-                    ✏️
+                <button class="icon-btn rem-btn-edit" data-id="${rem.id}" type="button" aria-label="Edit reminder" title="Edit reminder">
+                    ${getIcon('edit-2', { size: 14 })}
                 </button>
-                <button class="icon-btn rem-btn-delete" data-id="${rem.id}" type="button" title="Delete reminder" style="padding: 0.3rem 0.5rem; font-size: 0.85rem; color: #ef4444;">
-                    🗑️
+                <button class="icon-btn rem-btn-delete" data-id="${rem.id}" type="button" aria-label="Delete reminder" title="Delete reminder" style="color: var(--color-danger);">
+                    ${getIcon('trash-2', { size: 14 })}
                 </button>
             </div>
         </div>
@@ -315,9 +327,10 @@ function createReminderCard(rem) {
                 method: 'POST',
                 body: { id: rem.id, is_completed: e.target.checked },
             });
+            showToast('Reminder status updated', 'info', 1500);
             await fetchAndRenderReminders();
         } catch (err) {
-            alert('Failed to update reminder: ' + err.message);
+            showToast('Failed to update reminder: ' + err.message, 'danger');
             e.target.checked = !e.target.checked;
         }
     });
@@ -329,15 +342,17 @@ function createReminderCard(rem) {
 
     // Delete button
     card.querySelector('.rem-btn-delete')?.addEventListener('click', async () => {
-        if (confirm(`Delete reminder "${rem.title}"?`)) {
+        const confirmed = await showConfirmModal(`Delete reminder "${rem.title}"?`, 'Delete Reminder');
+        if (confirmed) {
             try {
                 await apiRequest('/api/reminders/delete', {
                     method: 'POST',
                     body: { id: rem.id },
                 });
+                showToast('Reminder deleted', 'success');
                 await fetchAndRenderReminders();
             } catch (err) {
-                alert('Failed to delete reminder: ' + err.message);
+                showToast('Failed to delete reminder: ' + err.message, 'danger');
             }
         }
     });
@@ -373,19 +388,18 @@ function openReminderModal(existing = null) {
         if (billIdInput) billIdInput.value = '';
         if (titleInput) titleInput.value = '';
         if (typeInput) typeInput.value = 'warranty';
-        // Default due date: 1 year from now
         const d = new Date();
         d.setFullYear(d.getFullYear() + 1);
         if (dueDateInput) dueDateInput.value = d.toISOString().split('T')[0];
         if (notesInput) notesInput.value = '';
     }
 
-    modal.style.display = 'flex';
+    modal.classList.add('open');
 }
 
 function closeReminderModal() {
     const modal = document.getElementById('remModalOverlay');
-    if (modal) modal.style.display = 'none';
+    if (modal) modal.classList.remove('open');
 }
 
 async function saveReminderForm() {
@@ -407,17 +421,17 @@ async function saveReminderForm() {
 
     try {
         if (id) {
-            // Update
             await apiRequest('/api/reminders/update', {
                 method: 'POST',
                 body: { id: Number(id), title, reminder_type: type, due_date: dueDate, notes },
             });
+            showToast('Reminder updated', 'success');
         } else {
-            // Create
             await apiRequest('/api/reminders', {
                 method: 'POST',
                 body: { title, reminder_type: type, due_date: dueDate, notes, bill_id: billId ? Number(billId) : null },
             });
+            showToast('Reminder created', 'success');
         }
 
         closeReminderModal();
@@ -445,34 +459,17 @@ window.addSuggestedReminder = async function(btnEl, reminderData) {
             body: reminderData,
         });
         if (btnEl) {
-            btnEl.textContent = '✅ Reminder Added';
-            btnEl.style.background = 'rgba(16, 185, 129, 0.2)';
-            btnEl.style.color = '#34d399';
-            btnEl.style.borderColor = '#10b981';
+            btnEl.innerHTML = `${getIcon('check', { size: 13 })} Added`;
+            btnEl.style.background = 'var(--color-success-subtle)';
+            btnEl.style.color = 'var(--color-success)';
+            btnEl.style.borderColor = 'var(--color-success)';
         }
+        showToast('Reminder added', 'success');
     } catch (e) {
-        alert('Failed to add reminder: ' + e.message);
+        showToast('Failed to add reminder: ' + e.message, 'danger');
         if (btnEl) {
             btnEl.disabled = false;
-            btnEl.textContent = '⏰ Add Reminder';
+            btnEl.innerHTML = `${getIcon('bell', { size: 13 })} Add Reminder`;
         }
     }
 };
-
-function formatDate(dateStr) {
-    if (!dateStr) return '';
-    const parts = dateStr.split('-');
-    if (parts.length === 3) {
-        return `${parts[2]}-${parts[1]}-${parts[0]}`;
-    }
-    return dateStr;
-}
-
-function escapeHtml(str) {
-    if (!str) return '';
-    return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-}

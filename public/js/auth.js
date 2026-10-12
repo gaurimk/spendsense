@@ -27,17 +27,22 @@ export function setUploadLimit(info) {
 
 export function updateUploadPill() {
     const pill = document.getElementById('uploadPill');
+    const countEl = document.getElementById('uploadPillCount');
+    const limitEl = document.getElementById('uploadPillLimit');
     if (!pill) return;
+
     if (uploadLimitInfo) {
         const count = uploadLimitInfo.count ?? 0;
         const limit = uploadLimitInfo.limit ?? 20;
-        pill.innerHTML = `<span>⚡</span> <span><strong>${count}</strong> / ${limit} uploads today</span>`;
+        if (countEl) countEl.textContent = count;
+        if (limitEl) limitEl.textContent = limit;
+
         if (count >= limit) {
-            pill.style.borderColor = '#ef4444';
-            pill.style.color = '#fca5a5';
+            pill.style.borderColor = 'var(--color-danger)';
+            pill.style.color = 'var(--color-danger)';
         } else {
-            pill.style.borderColor = 'var(--border)';
-            pill.style.color = 'var(--text-muted)';
+            pill.style.borderColor = 'var(--color-border)';
+            pill.style.color = 'var(--color-text-muted)';
         }
     }
 }
@@ -104,30 +109,44 @@ export async function logout() {
     window.location.reload();
 }
 
+function getInitials(name) {
+    if (!name) return 'U';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+        return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return parts[0].slice(0, 2).toUpperCase();
+}
+
 function updateUserUI() {
-    const userBadge = document.getElementById('userBadge');
+    const userMenuContainer = document.getElementById('userMenuContainer');
+    const userAvatarInitials = document.getElementById('userAvatarInitials');
+    const userMenuName = document.getElementById('userMenuName');
+    const dropdownUserName = document.getElementById('dropdownUserName');
+    const dropdownUserEmail = document.getElementById('dropdownUserEmail');
     const authBtn = document.getElementById('authNavBtn');
     const uploadPill = document.getElementById('uploadPill');
 
     if (currentUser) {
-        if (userBadge) {
-            userBadge.textContent = `${currentUser.full_name} (${currentSettings?.currency_symbol || '₹'})`;
-            userBadge.style.display = 'inline-block';
-        }
-        if (authBtn) {
-            authBtn.textContent = 'Logout';
-            authBtn.onclick = logout;
-        }
+        const initials = getInitials(currentUser.full_name);
+        if (userAvatarInitials) userAvatarInitials.textContent = initials;
+        if (userMenuName) userMenuName.textContent = currentUser.full_name;
+        if (dropdownUserName) dropdownUserName.textContent = currentUser.full_name;
+        if (dropdownUserEmail) dropdownUserEmail.textContent = currentUser.email;
+
+        if (userMenuContainer) userMenuContainer.style.display = 'block';
+        if (authBtn) authBtn.style.display = 'none';
         if (uploadPill) {
-            uploadPill.style.display = 'flex';
+            uploadPill.style.display = 'inline-flex';
             updateUploadPill();
         }
         closeAuthModal();
     } else {
-        if (userBadge) userBadge.style.display = 'none';
+        if (userMenuContainer) userMenuContainer.style.display = 'none';
         if (uploadPill) uploadPill.style.display = 'none';
         if (authBtn) {
-            authBtn.textContent = 'Login / Sign Up';
+            authBtn.style.display = 'inline-block';
+            authBtn.textContent = 'Log In / Sign Up';
             authBtn.onclick = openAuthModal;
         }
         openAuthModal();
@@ -136,10 +155,16 @@ function updateUserUI() {
 
 export function openAuthModal() {
     const modal = document.getElementById('authModal');
-    if (modal) modal.classList.add('open');
+    if (modal) {
+        modal.classList.add('open');
+        document.body.classList.add('modal-open');
+    }
 }
 
 export function closeAuthModal() {
     const modal = document.getElementById('authModal');
-    if (modal) modal.classList.remove('open');
+    if (modal) {
+        modal.classList.remove('open');
+        document.body.classList.remove('modal-open');
+    }
 }

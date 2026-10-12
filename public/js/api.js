@@ -37,6 +37,10 @@ export async function apiRequest(endpoint, options = {}) {
         headers['Content-Type'] = 'application/json';
     }
 
+    if (options.body && typeof options.body === 'object' && !(options.body instanceof FormData)) {
+        options.body = JSON.stringify(options.body);
+    }
+
     if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method.toUpperCase())) {
         if (!csrfToken) {
             await fetchCsrfToken();

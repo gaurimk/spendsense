@@ -8,6 +8,8 @@ import { apiRequest } from './api.js';
 import { renderBillCard } from './bill-card.js';
 import { setUploadLimit } from './auth.js';
 import { prepareBillFiles } from './image-prep.js';
+import { getIcon } from './icons.js';
+import { escapeHtml, renderSafeMarkdown } from './utils.js';
 
 let messagesContainer = null;
 let chatInput = null;
@@ -22,8 +24,9 @@ export function initChat() {
     const fileInput = document.getElementById('fileUploadInput');
     const cameraInput = document.getElementById('cameraUploadInput');
 
-    // Welcome chips click handlers
+    // Welcome chips click handlers (skip demo button)
     document.querySelectorAll('.chip-btn').forEach(btn => {
+        if (btn.id === 'btnLoadDemoChip') return;
         btn.addEventListener('click', () => {
             if (chatInput) {
                 chatInput.value = btn.textContent.trim();
@@ -54,9 +57,9 @@ export function initChat() {
         });
     }
 
-    // Camera capture button
+    // Camera capture button (supports both laptop webcam and mobile camera)
     if (cameraBtn && cameraInput) {
-        cameraBtn.addEventListener('click', () => cameraInput.click());
+        cameraBtn.addEventListener('click', () => openLiveCameraModal(cameraInput));
         cameraInput.addEventListener('change', () => {
             if (cameraInput.files.length > 0) {
                 uploadBillFile(cameraInput.files);
@@ -72,11 +75,110 @@ export function initChat() {
     loadChatHistory();
 }
 
+async function openLiveCameraModal(cameraInput) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        cameraInput.click();
+        return;
+    }
+
+    let modal = document.getElementById('liveCameraModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'liveCameraModal';
+        modal.className = 'modal-backdrop';
+        modal.innerHTML = `
+            <div class="modal-window" style="max-width: 560px; width: 95vw;">
+                <div class="modal-header">
+                    <div class="modal-title" style="display: flex; align-items: center; gap: 0.45rem;">
+                        ${getIcon('camera', { size: 18 })} Capture Bill with Camera
+                    </div>
+                    <button type="button" class="close-btn" id="btnCloseLiveCamera" aria-label="Close camera">&times;</button>
+                </div>
+                <div class="modal-body" style="display: flex; flex-direction: column; gap: 0.85rem; align-items: center;">
+                    <div style="width: 100%; background: #090d16; border-radius: var(--radius-md); overflow: hidden; border: 1px solid var(--color-border); position: relative; min-height: 280px; display: flex; align-items: center; justify-content: center;">
+                        <video id="liveCameraVideo" autoplay playsinline muted style="width: 100%; max-height: 60vh; object-fit: contain; display: block;"></video>
+                    </div>
+                    <div style="font-size: 0.8rem; color: var(--color-text-muted); text-align: center;">
+                        Position the receipt clearly inside the frame and tap Capture Photo.
+                    </div>
+                </div>
+                <div class="modal-footer" style="justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+                    <button type="button" class="btn btn-secondary" id="btnFallbackFileCamera">
+                        Choose File / Device Camera
+                    </button>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button type="button" class="btn btn-secondary" id="btnCancelLiveCamera">Cancel</button>
+                        <button type="button" class="btn btn-primary" id="btnTakeCameraSnapshot">
+                            ${getIcon('camera', { size: 16 })} Capture Photo
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+
+    const videoEl = modal.querySelector('#liveCameraVideo');
+    let stream = null;
+
+    const stopCameraAndClose = () => {
+        if (stream) {
+            stream.getTracks().forEach(t => t.stop());
+            stream = null;
+        }
+        if (videoEl) {
+            videoEl.srcObject = null;
+        }
+        modal.classList.remove('open');
+        document.body.classList.remove('modal-open');
+    };
+
+    modal.querySelector('#btnCloseLiveCamera').onclick = stopCameraAndClose;
+    modal.querySelector('#btnCancelLiveCamera').onclick = stopCameraAndClose;
+    modal.querySelector('#btnFallbackFileCamera').onclick = () => {
+        stopCameraAndClose();
+        cameraInput.click();
+    };
+
+    modal.querySelector('#btnTakeCameraSnapshot').onclick = () => {
+        if (!videoEl || !videoEl.videoWidth) return;
+        const canvas = document.createElement('canvas');
+        canvas.width = videoEl.videoWidth;
+        canvas.height = videoEl.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => {
+            stopCameraAndClose();
+            if (blob) {
+                const file = new File([blob], `camera_bill_${Date.now()}.jpg`, { type: 'image/jpeg' });
+                uploadBillFile([file]);
+            }
+        }, 'image/jpeg', 0.92);
+    };
+
+    try {
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+                audio: false
+            });
+        } catch {
+            stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        }
+        videoEl.srcObject = stream;
+        modal.classList.add('open');
+        document.body.classList.add('modal-open');
+    } catch (err) {
+        stopCameraAndClose();
+        cameraInput.click();
+    }
+}
+
 export function appendUserMessage(text) {
     const row = document.createElement('div');
     row.className = 'message-row user';
     row.innerHTML = `
-        <div class="avatar user-avatar">👤</div>
+        <div class="avatar user-avatar">${getIcon('user', { size: 16 })}</div>
         <div class="message-bubble">${escapeHtml(text)}</div>
     `;
     messagesContainer.appendChild(row);
@@ -87,8 +189,8 @@ export function appendAssistantMessage(text) {
     const row = document.createElement('div');
     row.className = 'message-row assistant';
     row.innerHTML = `
-        <div class="avatar assistant-avatar">✨</div>
-        <div class="message-bubble">${escapeHtml(text)}</div>
+        <div class="avatar assistant-avatar">${getIcon('sparkles', { size: 16 })}</div>
+        <div class="message-bubble"><div class="bubble-text">${renderSafeMarkdown(text)}</div></div>
     `;
     messagesContainer.appendChild(row);
     scrollToBottom();
@@ -98,9 +200,9 @@ export function appendInsightMessage(insightText) {
     const row = document.createElement('div');
     row.className = 'message-row assistant';
     row.innerHTML = `
-        <div class="avatar assistant-avatar">💡</div>
-        <div class="message-bubble" style="border-left: 3px solid var(--accent-green); background: rgba(16, 185, 129, 0.08);">
-            <strong>SpendSense Insight:</strong> ${escapeHtml(insightText)}
+        <div class="avatar assistant-avatar insight-avatar">${getIcon('lightbulb', { size: 16 })}</div>
+        <div class="message-bubble" style="border-left: 3px solid var(--color-success); background: var(--color-success-subtle);">
+            <div class="bubble-text"><strong>SpendSense Insight:</strong> ${renderSafeMarkdown(insightText)}</div>
         </div>
     `;
     messagesContainer.appendChild(row);
@@ -111,8 +213,8 @@ export function appendErrorMessage(errorTitle, errorDetails) {
     const row = document.createElement('div');
     row.className = 'message-row assistant';
     row.innerHTML = `
-        <div class="avatar assistant-avatar" style="background: var(--accent-red);">⚠️</div>
-        <div class="message-bubble" style="background: var(--accent-red-bg); border-color: var(--accent-red); color: #fca5a5;">
+        <div class="avatar assistant-avatar error-avatar">${getIcon('alert-triangle', { size: 16 })}</div>
+        <div class="message-bubble" style="background: var(--color-danger-subtle); border-color: var(--color-danger); color: #fca5a5;">
             <div style="font-weight: 700; color: #ffffff; margin-bottom: 0.25rem;">${escapeHtml(errorTitle)}</div>
             <div>${escapeHtml(errorDetails)}</div>
         </div>
@@ -121,18 +223,31 @@ export function appendErrorMessage(errorTitle, errorDetails) {
     scrollToBottom();
 }
 
-export function showTypingIndicator(message = 'Reading your bill...') {
+export function showTypingIndicator(message = 'Reading your bill...', progressPercent = null) {
     hideTypingIndicator();
     const row = document.createElement('div');
     row.className = 'message-row assistant';
     row.id = 'activeTypingRow';
-    row.innerHTML = `
-        <div class="avatar assistant-avatar">✨</div>
-        <div class="typing-indicator">
-            <span>${escapeHtml(message)}</span>
-            <div class="dots-loader">
-                <span></span><span></span><span></span>
+
+    let progressBarHtml = '';
+    if (progressPercent !== null) {
+        progressBarHtml = `
+            <div class="upload-progress-bar" style="width: 100%; height: 4px; background: var(--color-surface-raised); border-radius: 999px; overflow: hidden; margin-top: 0.5rem;">
+                <div class="upload-progress-fill" style="width: ${progressPercent}%; height: 100%; background: var(--color-primary); transition: width 0.3s ease; border-radius: 999px;"></div>
             </div>
+        `;
+    }
+
+    row.innerHTML = `
+        <div class="avatar assistant-avatar">${getIcon('sparkles', { size: 16 })}</div>
+        <div class="typing-indicator" style="display: flex; flex-direction: column; min-width: 220px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;">
+                <span>${escapeHtml(message)}</span>
+                <div class="dots-loader">
+                    <span></span><span></span><span></span>
+                </div>
+            </div>
+            ${progressBarHtml}
         </div>
     `;
     messagesContainer.appendChild(row);
@@ -180,9 +295,9 @@ export function appendAssistantMessageWithVis(text, visualization = null) {
     const row = document.createElement('div');
     row.className = 'message-row assistant';
     
-    const formattedText = formatMarkdown(text);
+    const formattedText = renderSafeMarkdown(text);
     row.innerHTML = `
-        <div class="avatar assistant-avatar">✨</div>
+        <div class="avatar assistant-avatar">${getIcon('sparkles', { size: 16 })}</div>
         <div class="message-bubble" style="max-width: 580px; width: 100%;">
             <div class="bubble-text" style="line-height: 1.6;">${formattedText}</div>
             <div class="vis-container" style="margin-top: 0.75rem;"></div>
@@ -329,16 +444,6 @@ function renderVisualization(vis, container) {
     }
 }
 
-function formatMarkdown(text) {
-    if (!text) return '';
-    return escapeHtml(text)
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/\n\n/g, '<br><br>')
-        .replace(/\n•\s/g, '<br>• ')
-        .replace(/\n(\d+\.\s)/g, '<br>$1');
-}
-
 export async function uploadBillFile(fileInput) {
     if (!fileInput) return;
 
@@ -368,7 +473,7 @@ export async function uploadBillFile(fileInput) {
     }
 
     // Client-side image preparation: canvas resize to 2000px, EXIF rotation, JPEG compression, darkness/blur check
-    showTypingIndicator('Optimizing image & preparing upload...');
+    showTypingIndicator('Optimizing image & preparing upload...', 35);
     let prep;
     try {
         prep = await prepareBillFiles(fileList);
@@ -384,18 +489,18 @@ export async function uploadBillFile(fileInput) {
     const firstFileName = prep.files[0]?.name || 'bill.jpg';
     const totalCount = prep.files.length;
     const uploadLabel = totalCount > 1 
-        ? `📎 Uploaded receipt: ${firstFileName} (+ ${totalCount - 1} more parts for long bill)`
-        : `📎 Uploaded receipt: ${firstFileName}`;
+        ? `Uploaded receipt: ${firstFileName} (+ ${totalCount - 1} more parts for long bill)`
+        : `Uploaded receipt: ${firstFileName}`;
 
     appendUserMessage(uploadLabel);
 
     // If image was dark or blurry, show helpful camera guidance tip
     if (prep.tipMessage) {
-        appendInsightMessage(`💡 Tip: ${prep.tipMessage}`);
+        appendInsightMessage(`Tip: ${prep.tipMessage}`);
     }
 
-    // Show Gemini reading indicator
-    showTypingIndicator('Reading your bill with Gemini AI...');
+    // Show Gemini reading indicator with progress
+    showTypingIndicator('Reading your bill with Gemini AI...', 75);
 
     const formData = new FormData();
     prep.files.forEach((f, idx) => {
@@ -417,7 +522,7 @@ export async function uploadBillFile(fileInput) {
             // Render structured bill summary card in chat
             const cardRow = document.createElement('div');
             cardRow.className = 'message-row assistant';
-            cardRow.innerHTML = `<div class="avatar assistant-avatar">✨</div>`;
+            cardRow.innerHTML = `<div class="avatar assistant-avatar">${getIcon('sparkles', { size: 16 })}</div>`;
             renderBillCard(response.draft, cardRow);
             messagesContainer.appendChild(cardRow);
             scrollToBottom();
@@ -516,14 +621,4 @@ function scrollToBottom() {
     if (messagesContainer) {
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
-}
-
-function escapeHtml(text) {
-    if (!text) return '';
-    return String(text)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
 }
