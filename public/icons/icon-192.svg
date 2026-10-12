@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <defs>
+    <linearGradient id="ssGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#4338ca"/>
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="40" fill="url(#ssGrad)"/>
+  <!-- Rupee Symbol & Receipt silhouette -->
+  <path d="M52 48 h88 v12 H52 Z" fill="#ffffff" opacity="0.9"/>
+  <path d="M52 68 h64 v12 H52 Z" fill="#ffffff" opacity="0.9"/>
+  <path d="M52 88 h40 v12 H52 Z" fill="#ffffff" opacity="0.9"/>
+  <!-- Centered Rupee icon -->
+  <text x="96" y="142" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="64" font-weight="900" fill="#34d399" text-anchor="middle">₹</text>
+</svg>

@@ -52,6 +52,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             window.showGlobalError('Error initializing app: ' + (e.message || e));
         }
     }
+
+    // 7. Register PWA Service Worker for mobile installability and offline caching
+    if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost')) {
+        navigator.serviceWorker.register('/sw.js').catch(err => {
+            console.warn('Service worker registration note:', err);
+        });
+    }
 });
 
 function setupTabNavigation() {
