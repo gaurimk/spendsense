@@ -1,0 +1,10 @@
+.git
+.gitignore
+.env
+data/*.sqlite
+data/*.sqlite-wal
+data/*.sqlite-shm
+data/*.log
+uploads/*
+tests/
+.DS_Store

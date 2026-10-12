@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SpendSense - Chat-first Expense Assistant</title>
+    <!-- Chart.js from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/css/style.css">
+    <!-- Immediate Global Error Handler -->
+    <script>
+        window.showGlobalError = function(msg) {
+            var banner = document.getElementById('globalErrorBanner');
+            var msgEl = document.getElementById('globalErrorMessage');
+            if (banner && msgEl) {
+                msgEl.textContent = msg;
+                banner.style.display = 'flex';
+            } else {
+                alert('[SpendSense Error] ' + msg);
+            }
+        };
+        window.addEventListener('error', function(e) {
+            console.error('Captured window error:', e);
+            window.showGlobalError(e.message || 'JavaScript runtime error');
+        });
+        window.addEventListener('unhandledrejection', function(e) {
+            console.error('Captured unhandled rejection:', e);
+            window.showGlobalError(e.reason && (e.reason.message || e.reason) || 'Unhandled Promise rejection');
+        });
+    </script>
+</head>
+<body>
+    <!-- Global Error Display Banner -->
+    <div id="globalErrorBanner" style="display: none; position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); z-index: 99999; max-width: 90%; width: 550px; background: #dc2626; color: #ffffff; padding: 0.85rem 1.25rem; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.6); font-size: 0.9rem; align-items: center; gap: 0.75rem;">
+        <span style="font-size: 1.2rem;">⚠️</span>
+        <span id="globalErrorMessage" style="flex: 1; word-break: break-word;"></span>
+        <button type="button" onclick="this.parentElement.style.display='none'" style="background: none; border: none; color: #ffffff; font-size: 1.3rem; cursor: pointer; line-height: 1; padding: 0 0.25rem;">&times;</button>
+    </div>
+
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="brand">
+                <div class="brand-icon">₹</div>
+                <div class="brand-title">SpendSense</div>
+                <span class="brand-badge">AI Assistant</span>
+            </div>
+            <div class="nav-controls">
+                <button class="btn btn-secondary" id="btnLoadDemoDataHeader" type="button" style="font-size: 0.78rem; padding: 0.35rem 0.65rem; border-color: #4f46e5; color: #c7d2fe;" title="Seed 40 realistic bills across 3 months">
+                    ⚡ Load Demo Data
+                </button>
+                <div class="upload-pill" id="uploadPill" style="display: none;">
+                    <span>⚡</span> <span><strong>0</strong> / 20 uploads today</span>
+                </div>
+                <span class="user-badge" id="userBadge" style="display: none;">User</span>
+                <button class="btn btn-secondary" id="authNavBtn" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">
+                    Login / Sign Up
+                </button>
+            </div>
+        </header>
+
+        <!-- Secondary Navigation Tabs -->
+        <nav class="nav-tabs">
+            <button class="tab-btn active" data-screen="screenChat" type="button">
+                <span>💬</span> <span>Chat</span>
+            </button>
+            <button class="tab-btn" data-screen="screenInsights" type="button">
+                <span>📊</span> <span>Insights</span>
+            </button>
+            <button class="tab-btn" data-screen="screenBills" type="button">
+                <span>🧾</span> <span>Bills</span>
+            </button>
+            <button class="tab-btn" data-screen="screenBudgets" type="button">
+                <span>🎯</span> <span>Budgets</span>
+            </button>
+            <button class="tab-btn" data-screen="screenPriceTracker" type="button">
+                <span>🏷️</span> <span>Price Tracker</span>
+            </button>
+            <button class="tab-btn" data-screen="screenReminders" type="button">
+                <span>⏰</span> <span>Reminders</span>
+            </button>
+            <button class="tab-btn" data-screen="screenSettings" type="button">
+                <span>⚙️</span> <span>Settings</span>
+            </button>
+        </nav>
+
+        <!-- App Screens Container -->
+        <main class="app-content">
+            <!-- 1. CHAT SCREEN (Core Experience) -->
+            <section class="screen-view active" id="screenChat">
+                <div class="chat-container">
+                    <!-- Drag and Drop Overlay -->
+                    <div class="drop-overlay" id="dropOverlay">
+                        <div class="drop-icon">📄</div>
+                        <div class="drop-text">Drop your bill or receipt here</div>
+                        <p style="color: var(--text-muted); font-size: 0.9rem;">Supports JPG, PNG, WebP, and PDF</p>
+                    </div>
+
+                    <!-- Messages Stream -->
+                    <div class="chat-messages" id="chatMessages">
+                        <!-- Welcome Message Card -->
+                        <div class="welcome-card" id="welcomeCard">
+                            <h2 class="welcome-title">Welcome to SpendSense! 👋</h2>
+                            <p class="welcome-subtitle">
+                                I'm your expense assistant. Upload a supermarket receipt, restaurant bill, pharmacy slip, or fuel invoice, or tap a question below to explore.
+                            </p>
+                            <div class="suggestion-chips">
+                                <button class="chip-btn" type="button">Where did I spend the most this month?</button>
+                                <button class="chip-btn" type="button">How much did I spend on snacks?</button>
+                                <button class="chip-btn" type="button">Which store is cheaper for milk?</button>
+                                <button class="chip-btn" type="button">Compare this month with last month</button>
+                                <button class="chip-btn" type="button">Show my 5 biggest bills</button>
+                                <button class="chip-btn" id="btnLoadDemoChip" type="button" style="border-color: #6366f1; color: #a5b4fc;">⚡ Load 40 Demo Bills</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Chat Input Bar -->
+                    <div class="chat-input-bar">
+                        <!-- Hidden File Inputs (Supports up to 3 photos for long bills) -->
+                        <input type="file" id="fileUploadInput" accept="image/jpeg,image/png,image/webp,application/pdf" multiple style="display: none;">
+                        <input type="file" id="cameraUploadInput" accept="image/*" capture="environment" multiple style="display: none;">
+
+                        <!-- Attach Button -->
+                        <button class="icon-btn" id="btnAttachFile" type="button" title="Attach bill (image or PDF)">
+                            📎
+                        </button>
+                        <!-- Camera Capture Button -->
+                        <button class="icon-btn" id="btnCameraCapture" type="button" title="Capture bill with camera">
+                            📷
+                        </button>
+
+                        <!-- Text Input -->
+                        <input type="text" class="chat-input-field" id="chatInputField" placeholder="Ask a question or upload a receipt..." autocomplete="off">
+
+                        <!-- Send Button -->
+                        <button class="btn-send" id="btnSendMessage" type="button" title="Send message">
+                            ➤
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. INSIGHTS SCREEN -->
+            <section class="screen-view" id="screenInsights" style="overflow-y: auto;">
+                <div style="padding: 2.5rem 1rem; text-align: center; color: var(--text-muted);">
+                    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📊</div>
+                    <h3>Loading Insights Dashboard...</h3>
+                    <p style="font-size: 0.88rem; margin-top: 0.5rem;">Aggregating spending stats, trends, and category distribution.</p>
+                </div>
+            </section>
+
+            <!-- 3. BILLS SCREEN -->
+            <section class="screen-view" id="screenBills" style="overflow-y: auto;">
+                <div style="padding: 2.5rem 1rem; text-align: center; color: var(--text-muted);">
+                    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🧾</div>
+                    <h3>Loading Saved Bills...</h3>
+                    <p style="font-size: 0.88rem; margin-top: 0.5rem;">Fetching receipt records, dates, and line item counts.</p>
+                </div>
+            </section>
+
+            <!-- 4. BUDGETS SCREEN -->
+            <section class="screen-view" id="screenBudgets" style="overflow-y: auto;">
+                <div style="padding: 2.5rem 1rem; text-align: center; color: var(--text-muted);">
+                    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🎯</div>
+                    <h3>Loading Category Budgets...</h3>
+                    <p style="font-size: 0.88rem; margin-top: 0.5rem;">Calculating progress limits and threshold alerts.</p>
+                </div>
+            </section>
+
+            <!-- 5. PRICE TRACKER SCREEN (Stage 5 Feature Preview) -->
+            <section class="screen-view" id="screenPriceTracker" style="padding: 1.5rem; overflow-y: auto;">
+                <div style="max-width: 900px; margin: 0 auto; width: 100%;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.5rem;">
+                        <div>
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <h2 style="font-size: 1.4rem; font-weight: 700;">🏷️ Item Price Tracker</h2>
+                                <span style="background: rgba(99, 102, 241, 0.2); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.4); font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 999px;">STAGE 5 READY</span>
+                            </div>
+                            <p style="color: var(--text-muted); font-size: 0.88rem; margin-top: 0.25rem;">Compare grocery and essential rates across merchants (DMart vs Local Kirana vs Blinkit)</p>
+                        </div>
+                    </div>
+
+                    <!-- Highlight / Quick-Ask Banner -->
+                    <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1.5rem;">
+                        <h3 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 0.5rem;">💬 Live in Chat Assistant</h3>
+                        <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 1rem;">
+                            You can already ask the chat assistant directly about item prices! Try one of these queries:
+                        </p>
+                        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                            <button class="chip-btn" onclick="window.switchTab('screenChat'); document.getElementById('chatInputField').value='Which store is cheaper for milk?'; document.getElementById('btnSendMessage').click();">
+                                🥛 Which store is cheaper for milk?
+                            </button>
+                            <button class="chip-btn" onclick="window.switchTab('screenChat'); document.getElementById('chatInputField').value='What was the price history of basmati rice?'; document.getElementById('btnSendMessage').click();">
+                                🍚 Price history of basmati rice?
+                            </button>
+                            <button class="chip-btn" onclick="window.switchTab('screenChat'); document.getElementById('chatInputField').value='Where did I buy Fortune sunflower oil cheapest?'; document.getElementById('btnSendMessage').click();">
+                                🌻 Cheapest store for sunflower oil?
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Preview Price Comparison Cards -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem;">
+                        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                                <strong style="color: #ffffff;">Amul Taaza Milk 500ml</strong>
+                                <span style="color: var(--accent-green); font-size: 0.78rem; font-weight: 700;">CHEAPEST AT DMART</span>
+                            </div>
+                            <div style="font-size: 1.25rem; font-weight: 800; color: #ffffff; margin-bottom: 0.2rem;">₹27.00 <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 400;">vs ₹28.50 kirana</span></div>
+                            <div style="font-size: 0.78rem; color: var(--text-muted);">Lowest rate recorded in DMart Bandra</div>
+                        </div>
+
+                        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                                <strong style="color: #ffffff;">Fortune Sunflower Oil 1L</strong>
+                                <span style="color: #f59e0b; font-size: 0.78rem; font-weight: 700;">▲ 6.5% INFLATION</span>
+                            </div>
+                            <div style="font-size: 1.25rem; font-weight: 800; color: #ffffff; margin-bottom: 0.2rem;">₹165.00 <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 400;">was ₹155.00</span></div>
+                            <div style="font-size: 0.78rem; color: var(--text-muted);">Tracked across 4 purchases</div>
+                        </div>
+
+                        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                                <strong style="color: #ffffff;">Daawat Basmati Rice 5kg</strong>
+                                <span style="color: var(--accent-green); font-size: 0.78rem; font-weight: 700;">CHEAPEST AT RELIANCE</span>
+                            </div>
+                            <div style="font-size: 1.25rem; font-weight: 800; color: #ffffff; margin-bottom: 0.2rem;">₹499.00 <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 400;">vs ₹540.00</span></div>
+                            <div style="font-size: 0.78rem; color: var(--text-muted);">Save ₹41.00 per 5kg pack</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 6. REMINDERS SCREEN (Stage 5 Feature Preview) -->
+            <section class="screen-view" id="screenReminders" style="padding: 1.5rem; overflow-y: auto;">
+                <div style="max-width: 900px; margin: 0 auto; width: 100%;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.5rem;">
+                        <div>
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <h2 style="font-size: 1.4rem; font-weight: 700;">⏰ Warranty & Return Reminders</h2>
+                                <span style="background: rgba(99, 102, 241, 0.2); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.4); font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 999px;">STAGE 5 READY</span>
+                            </div>
+                            <p style="color: var(--text-muted); font-size: 0.88rem; margin-top: 0.25rem;">Automatic deadlines extracted from your electronics and apparel bills</p>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; gap: 1rem;">
+                        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                            <div>
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <strong style="color: #ffffff; font-size: 0.95rem;">🎧 JBL Tune 760NC Headphones</strong>
+                                    <span style="background: rgba(16, 185, 129, 0.15); color: #34d399; font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.4rem; border-radius: 4px;">1 YEAR WARRANTY</span>
+                                </div>
+                                <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">Purchased at Croma Electronics &bull; Bill #CR-94812</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-weight: 700; color: #a5b4fc; font-size: 0.9rem;">Expires 15 Oct 2027</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted);">Active Coverage</div>
+                            </div>
+                        </div>
+
+                        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                            <div>
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <strong style="color: #ffffff; font-size: 0.95rem;">👔 Cotton Linen Casual Shirt</strong>
+                                    <span style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.4rem; border-radius: 4px;">RETURN WINDOW</span>
+                                </div>
+                                <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">Purchased at Westside &bull; 14-day exchange policy</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-weight: 700; color: #fbbf24; font-size: 0.9rem;">7 days remaining</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted);">Deadline: 19 Oct 2026</div>
+                            </div>
+                        </div>
+
+                        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                            <div>
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <strong style="color: #ffffff; font-size: 0.95rem;">⚡ Havells 4-Way Extension Board</strong>
+                                    <span style="background: rgba(16, 185, 129, 0.15); color: #34d399; font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.4rem; border-radius: 4px;">2 YEAR REPLACEMENT</span>
+                                </div>
+                                <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">Purchased at Vijay Sales &bull; Bill #VS-3942</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-weight: 700; color: #a5b4fc; font-size: 0.9rem;">Expires 28 Aug 2028</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted);">Active Coverage</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 7. SETTINGS SCREEN (Stage 5 Feature Preview) -->
+            <section class="screen-view" id="screenSettings" style="padding: 1.5rem; overflow-y: auto;">
+                <div style="max-width: 900px; margin: 0 auto; width: 100%;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.5rem;">
+                        <div>
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <h2 style="font-size: 1.4rem; font-weight: 700;">⚙️ Settings & Privacy</h2>
+                                <span style="background: rgba(99, 102, 241, 0.2); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.4); font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 999px;">STAGE 5 READY</span>
+                            </div>
+                            <p style="color: var(--text-muted); font-size: 0.88rem; margin-top: 0.25rem;">Manage your profile, currency preference, upload limits, and privacy controls</p>
+                        </div>
+                    </div>
+
+                    <!-- Settings Sections Grid -->
+                    <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+                        <!-- Preferences Card -->
+                        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem;">
+                            <h3 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 0.75rem;">🌐 Regional & Account Preferences</h3>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+                                <div class="form-group">
+                                    <label class="form-label">Display Currency</label>
+                                    <select class="form-control" id="settingsCurrencySelect">
+                                        <option value="INR" selected>₹ INR - Indian Rupee (Default)</option>
+                                        <option value="USD">$ USD - US Dollar</option>
+                                        <option value="EUR">€ EUR - Euro</option>
+                                        <option value="GBP">£ GBP - British Pound</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Usage Profile</label>
+                                    <select class="form-control" id="settingsUsageSelect">
+                                        <option value="personal" selected>Personal Spending</option>
+                                        <option value="family">Family Budget</option>
+                                        <option value="shop">Small Shop & Business Mode</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Daily Upload Limit</label>
+                                    <div style="background: var(--bg-main); padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.88rem; color: #a5b4fc; font-weight: 600;">
+                                        20 bill uploads / day (Cost Control Quota)
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Privacy & Data Protection Card -->
+                        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem;">
+                            <h3 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 0.4rem; color: #34d399;">🔒 Strict Privacy & Security Safeguards</h3>
+                            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+                                Your bills can hold phone numbers and card digits. SpendSense instructs Gemini to completely strip and ignore personal numbers and credit/debit digits before returning data.
+                            </p>
+                            <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                                <button class="btn btn-secondary" onclick="alert('Exporting your full spending history to CSV format will download in Stage 5.')" type="button">
+                                    📥 Export My Data (CSV)
+                                </button>
+                                <button class="btn btn-danger-outline" onclick="if(confirm('Are you sure you want to permanently erase all your uploaded receipts and chat history?')) { alert('Data deletion requested. In Stage 5 this securely purges all user records.'); }" type="button">
+                                    🗑️ Delete All My Data
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <div>
+                <strong>SpendSense</strong> tracks your spending. It does not give financial or tax advice.
+            </div>
+            <div class="privacy-note">
+                <span>🔒</span> <span>Card numbers and phone numbers are never stored or logged.</span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- ─────────────────────────────────────────────────────────────
+         Edit Bill Modal
+    ───────────────────────────────────────────────────────────── -->
+    <div class="modal-backdrop" id="editBillModal">
+        <div class="modal-window" style="max-width: 1120px; width: 95vw;">
+            <div class="modal-header">
+                <div class="modal-title">Edit & Reconcile Bill Details</div>
+                <button class="close-btn" id="closeEditModalBtn" type="button">&times;</button>
+            </div>
+            <div class="modal-body" style="display: grid; grid-template-columns: minmax(300px, 420px) 1fr; gap: 1.25rem; align-items: start;">
+                <!-- Left Pane: Zoomable Original Bill Image Viewer -->
+                <div id="editImageReviewPane" style="background: var(--bg-main); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.3rem;">
+                        <span style="font-size: 0.82rem; font-weight: 700; color: var(--text-muted);">📷 Original Bill</span>
+                        <!-- Zoom & Pan Toolbar -->
+                        <div style="display: flex; gap: 0.25rem; align-items: center;">
+                            <button type="button" class="btn btn-secondary" id="btnZoomOut" style="padding: 0.2rem 0.45rem; font-size: 0.75rem;" title="Zoom Out">-</button>
+                            <span id="zoomLevelLabel" style="font-size: 0.75rem; color: var(--text-muted); min-width: 40px; text-align: center;">100%</span>
+                            <button type="button" class="btn btn-secondary" id="btnZoomIn" style="padding: 0.2rem 0.45rem; font-size: 0.75rem;" title="Zoom In">+</button>
+                            <button type="button" class="btn btn-secondary" id="btnZoomReset" style="padding: 0.2rem 0.45rem; font-size: 0.75rem;" title="Reset Zoom">Reset</button>
+                            <button type="button" class="btn btn-secondary" id="btnRotateImg" style="padding: 0.2rem 0.45rem; font-size: 0.75rem;" title="Rotate 90°">⟳</button>
+                        </div>
+                    </div>
+
+                    <!-- Multi-photo selector pills if long bill -->
+                    <div id="editMultiPhotoTabs" style="display: none; gap: 0.3rem; flex-wrap: wrap;"></div>
+
+                    <!-- Scrollable & Zoomable Image Viewport -->
+                    <div id="editImgViewport" style="overflow: auto; max-height: 520px; min-height: 280px; background: #090d16; border-radius: 4px; display: flex; align-items: center; justify-content: center; position: relative;">
+                        <img id="editReviewImg" src="" alt="Receipt" style="max-width: 100%; transition: transform 0.15s ease-out; transform-origin: top center; display: block; border-radius: 2px;">
+                        <div id="editReviewNoImg" style="display: none; padding: 2rem; color: var(--text-muted); font-size: 0.85rem; text-align: center;">No image preview available for this document.</div>
+                    </div>
+                    <div style="font-size: 0.72rem; color: var(--text-subtle); text-align: center;">Tip: Use mouse wheel or +/- controls to zoom. Compare handwritten amounts with line items.</div>
+                </div>
+
+                <!-- Right Pane: Editable Fields & Table -->
+                <div id="editFieldsPane">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Merchant Name</label>
+                            <input type="text" class="form-control" id="editMerchant" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Merchant Type</label>
+                            <select class="form-control" id="editType">
+                                <option value="supermarket">Supermarket & Grocery</option>
+                                <option value="restaurant">Restaurant & Cafe</option>
+                                <option value="pharmacy">Pharmacy & Medical</option>
+                                <option value="electronics">Electronics & Tech</option>
+                                <option value="fuel">Fuel & Gas</option>
+                                <option value="other">Other / Retail</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Bill / Invoice Number</label>
+                            <input type="text" class="form-control" id="editBillNumber">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Bill Date</label>
+                            <input type="date" class="form-control" id="editDate" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Payment Method</label>
+                            <select class="form-control" id="editPayment">
+                                <option value="">Not stated / Unspecified</option>
+                                <option value="UPI">UPI (Google Pay, PhonePe, Paytm)</option>
+                                <option value="cash">Cash</option>
+                                <option value="card">Card (Debit/Credit)</option>
+                                <option value="netbanking">Net Banking</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Line Items Table -->
+                    <div class="form-group">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                            <label class="form-label" style="margin: 0;">Line Items</label>
+                            <button type="button" class="btn btn-secondary" id="btnAddLineItem" style="font-size: 0.8rem; padding: 0.3rem 0.6rem;">
+                                + Add Item
+                            </button>
+                        </div>
+                        <div class="items-table-container">
+                            <table class="items-table">
+                                <thead>
+                                    <tr>
+                                        <th>Item Description</th>
+                                        <th>Category</th>
+                                        <th style="text-align: right;">Qty</th>
+                                        <th style="text-align: center;">Unit</th>
+                                        <th style="text-align: right;">Rate</th>
+                                        <th style="text-align: right;">Tax %</th>
+                                        <th style="text-align: right;">Total</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="editItemsBody">
+                                    <!-- Populated dynamically by bill-modal.js -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Totals -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Tax / GST Amount</label>
+                            <input type="number" step="0.01" class="form-control" id="editTaxAmount" value="0.00">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Discount Amount</label>
+                            <input type="number" step="0.01" class="form-control" id="editDiscountAmount" value="0.00">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Grand Total</label>
+                            <input type="number" step="0.01" class="form-control" id="editGrandTotal" style="font-weight: 700; color: var(--accent-green);" required>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="cancelEditBtn">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveEditBtn">Save Changes & Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─────────────────────────────────────────────────────────────
+         Authentication & Minimal Onboarding Modal
+    ───────────────────────────────────────────────────────────── -->
+    <div class="modal-backdrop" id="authModal">
+        <div class="modal-window" style="max-width: 440px;">
+            <div class="modal-header">
+                <div class="modal-title">SpendSense Account</div>
+                <button class="close-btn" id="closeAuthModalBtn" type="button">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="display: flex; gap: 0.5rem; background: var(--bg-main); padding: 0.25rem; border-radius: var(--radius-md);">
+                    <button type="button" class="auth-tab-btn active" data-mode="login" style="flex: 1; text-align: center;">Log In</button>
+                    <button type="button" class="auth-tab-btn" data-mode="register" style="flex: 1; text-align: center;">Sign Up</button>
+                </div>
+
+                <div id="authError" style="display: none; color: #fca5a5; background: var(--accent-red-bg); border: 1px solid var(--accent-red); padding: 0.6rem 0.8rem; border-radius: var(--radius-md); font-size: 0.85rem;"></div>
+
+                <form id="authForm" style="display: flex; flex-direction: column; gap: 1rem;">
+                    <div class="form-group" id="nameGroup" style="display: none;">
+                        <label class="form-label">Full Name</label>
+                        <input type="text" class="form-control" id="authName" placeholder="e.g. Rahul Verma">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Email Address</label>
+                        <input type="email" class="form-control" id="authEmail" placeholder="you@example.com" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Password</label>
+                        <input type="password" class="form-control" id="authPassword" placeholder="Minimum 6 characters" required>
+                    </div>
+
+                    <!-- Minimal Onboarding (shown on Sign Up) -->
+                    <div id="onboardingSection" style="display: none; display: flex; flex-direction: column; gap: 1rem; border-top: 1px solid var(--border); padding-top: 1rem;">
+                        <div class="form-group">
+                            <label class="form-label">Preferred Currency</label>
+                            <select class="form-control" id="authCurrency">
+                                <option value="INR" selected>₹ INR - Indian Rupee</option>
+                                <option value="USD">$ USD - US Dollar</option>
+                                <option value="EUR">€ EUR - Euro</option>
+                                <option value="GBP">£ GBP - British Pound</option>
+                                <option value="AED">د.إ AED - UAE Dirham</option>
+                                <option value="SGD">S$ SGD - Singapore Dollar</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">I'm using this for:</label>
+                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.88rem; cursor: pointer; background: var(--bg-main); padding: 0.4rem 0.75rem; border-radius: var(--radius-md); border: 1px solid var(--border);">
+                                    <input type="radio" name="usage_type" value="personal" checked> Personal
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.88rem; cursor: pointer; background: var(--bg-main); padding: 0.4rem 0.75rem; border-radius: var(--radius-md); border: 1px solid var(--border);">
+                                    <input type="radio" name="usage_type" value="family"> Family
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.88rem; cursor: pointer; background: var(--bg-main); padding: 0.4rem 0.75rem; border-radius: var(--radius-md); border: 1px solid var(--border);">
+                                    <input type="radio" name="usage_type" value="shop"> My Shop
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" id="authSubmitBtn" style="margin-top: 0.5rem; width: 100%;">
+                        Log In
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main JavaScript App -->
+    <script type="module" src="/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: spendsense
+    runtime: docker
+    plan: free
+    region: oregon
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false # Set your Gemini API key in the Render Dashboard
+      - key: GEMINI_MODEL
+        value: gemini-3.8-flash
+      - key: GEMINI_MODEL_HANDWRITTEN
+        value: gemini-3.8-flash
+      - key: SESSION_SECRET
+        generateValue: true

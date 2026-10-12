@@ -1,0 +1,6 @@
+.env
+/data/
+/uploads/
+*.sqlite
+*.log
+.DS_Store
