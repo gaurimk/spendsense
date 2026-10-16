@@ -27,6 +27,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 1. Initialize Theme (Light / Dark)
     initTheme();
 
+    // 1.5. Initialize Workspace Mode (Personal vs Business / Shop)
+    initAppMode();
+
     // 2. Setup Navigation (Rail, Tabs & Mobile)
     setupTabNavigation();
 
@@ -131,6 +134,331 @@ function applyTheme(theme) {
         metaThemeColor.setAttribute('content', theme === 'dark' ? '#0b0f17' : '#f8fafc');
     }
     window.dispatchEvent(new CustomEvent('themechanged', { detail: { theme } }));
+}
+
+/* ─────────────────────────────────────────────────────────────
+   App Workspace Mode: Personal vs Business / Shop
+───────────────────────────────────────────────────────────── */
+function initAppMode() {
+    const modePill = document.getElementById('modePill');
+    const modeDropdown = document.getElementById('modeDropdown');
+    const optPersonal = document.getElementById('modeOptPersonal');
+    const optBusiness = document.getElementById('modeOptBusiness');
+
+    let currentMode = 'personal';
+    try {
+        const saved = localStorage.getItem('spendsense_active_mode');
+        if (saved === 'business' || saved === 'shop') {
+            currentMode = 'business';
+        }
+    } catch (e) {
+        console.warn('Storage read note:', e);
+    }
+
+    window.setAppMode = function(mode, persist = true) {
+        currentMode = (mode === 'business' || mode === 'shop') ? 'business' : 'personal';
+        try {
+            localStorage.setItem('spendsense_active_mode', currentMode);
+        } catch (e) {
+            console.warn('Storage write note:', e);
+        }
+
+        document.documentElement.setAttribute('data-mode', currentMode);
+
+        // Update Pill UI
+        const pillText = document.getElementById('modePillText');
+        if (pillText) {
+            pillText.textContent = currentMode === 'business' ? 'Business' : 'Personal';
+        }
+        if (modePill) {
+            if (currentMode === 'business') {
+                modePill.classList.add('mode-business');
+                modePill.setAttribute('title', 'Active workspace: Business / Shop (Click to switch)');
+            } else {
+                modePill.classList.remove('mode-business');
+                modePill.setAttribute('title', 'Active workspace: Personal (Click to switch)');
+            }
+        }
+
+        // Update Dropdown active items
+        if (optPersonal) optPersonal.classList.toggle('active', currentMode === 'personal');
+        if (optBusiness) optBusiness.classList.toggle('active', currentMode === 'business');
+
+        // Update Chat Module Header
+        const chatModuleTitle = document.getElementById('chatModuleTitle');
+        const chatModuleDesc = document.getElementById('chatModuleDesc');
+        if (chatModuleTitle && chatModuleDesc) {
+            if (currentMode === 'business') {
+                chatModuleTitle.textContent = 'SpendSense Business';
+                chatModuleDesc.textContent = 'Purchase invoices, wholesale suppliers, payables & tax compliance';
+            } else {
+                chatModuleTitle.textContent = 'SpendSense Assistant';
+                chatModuleDesc.textContent = 'Kirana, store receipts and personal expense intelligence';
+            }
+        }
+
+        // Update Welcome Card
+        const welcomePromptSerif = document.getElementById('welcomePromptSerif');
+        const welcomeSubtitle = document.getElementById('welcomeSubtitle');
+        const welcomeWebLabel = document.getElementById('welcomeWebLabel');
+        if (welcomeWebLabel) {
+            welcomeWebLabel.textContent = currentMode === 'business' ? '01 — COMMERCIAL ASSISTANT' : '01 — SPEND ASSISTANT';
+        }
+        if (welcomePromptSerif) {
+            welcomePromptSerif.textContent = currentMode === 'business' ? 'What business expense are we recording?' : 'What needs to get tracked?';
+        }
+        if (welcomeSubtitle) {
+            welcomeSubtitle.textContent = currentMode === 'business' 
+                ? 'Your commercial expense assistant. Upload wholesale supplier invoices, retail bills, transport slips, or vendor receipts to track payables, inventory, and GST.'
+                : 'Your personal expense assistant. Upload a supermarket receipt, restaurant bill, pharmacy slip, or fuel invoice, or tap a suggestion below to explore.';
+        }
+
+        // Update Suggestion Chips
+        renderModeSuggestionChips(currentMode);
+
+        // Update Hub Header & Tiles
+        renderModeHubTiles(currentMode);
+
+        // Persist to backend if logged in
+        if (persist && getCurrentUser()) {
+            apiRequest('/api/settings/mode', {
+                method: 'POST',
+                body: JSON.stringify({ mode: currentMode, shop_mode: currentMode === 'business' })
+            }).catch(err => console.warn('Could not sync mode to backend:', err));
+        }
+
+        window.dispatchEvent(new CustomEvent('modechanged', { detail: { mode: currentMode } }));
+    };
+
+    // Toggle Dropdown when clicking Mode Pill
+    if (modePill && modeDropdown) {
+        modePill.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = modeDropdown.classList.toggle('open');
+            modePill.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!modeDropdown.contains(e.target) && e.target !== modePill) {
+                modeDropdown.classList.remove('open');
+                modePill.setAttribute('aria-expanded', 'false');
+            }
+        });
+    }
+
+    if (optPersonal) {
+        optPersonal.addEventListener('click', () => {
+            if (currentMode !== 'personal') {
+                window.setAppMode('personal', true);
+                showToast('Switched to Personal Mode (Household & Daily Expenses)', 'info', 2500);
+            }
+            if (modeDropdown) modeDropdown.classList.remove('open');
+        });
+    }
+
+    if (optBusiness) {
+        optBusiness.addEventListener('click', () => {
+            if (currentMode !== 'business') {
+                window.setAppMode('business', true);
+                showToast('Switched to Business / Shop Mode (Invoices, Suppliers & GST)', 'info', 2500);
+            }
+            if (modeDropdown) modeDropdown.classList.remove('open');
+        });
+    }
+
+    // Apply initial mode
+    window.setAppMode(currentMode, false);
+}
+
+function renderModeSuggestionChips(mode) {
+    const container = document.getElementById('chatSuggestionChips');
+    if (!container) return;
+
+    if (mode === 'business') {
+        container.innerHTML = `
+            <button class="chip-btn" type="button">Show my pending supplier payables</button>
+            <button class="chip-btn" type="button">Which supplier gives the best wholesale price?</button>
+            <button class="chip-btn" type="button">What is my GST tax breakdown this month?</button>
+            <button class="chip-btn" type="button">Show top 5 business expense categories</button>
+            <button class="chip-btn" type="button">Compare this month with last month</button>
+            <button class="chip-btn" id="btnLoadDemoChip" type="button" style="border-color: var(--color-primary); color: var(--color-primary);">
+                ${getIcon('zap', { size: 13 })} Load 40 Demo Bills
+            </button>
+        `;
+    } else {
+        container.innerHTML = `
+            <button class="chip-btn" type="button">Where did I spend the most this month?</button>
+            <button class="chip-btn" type="button">How much did I spend on snacks?</button>
+            <button class="chip-btn" type="button">Which store is cheaper for milk?</button>
+            <button class="chip-btn" type="button">Compare this month with last month</button>
+            <button class="chip-btn" type="button">Show my 5 biggest bills</button>
+            <button class="chip-btn" id="btnLoadDemoChip" type="button" style="border-color: var(--color-primary); color: var(--color-primary);">
+                ${getIcon('zap', { size: 13 })} Load 40 Demo Bills
+            </button>
+        `;
+    }
+
+    // Reattach listeners to chips
+    container.querySelectorAll('.chip-btn').forEach(btn => {
+        if (btn.id === 'btnLoadDemoChip') {
+            btn.addEventListener('click', async () => {
+                const { getCurrentUser } = await import('./auth.js');
+                if (!getCurrentUser()) {
+                    showToast('Please log in or create an account first.', 'warning');
+                    return;
+                }
+                try {
+                    btn.disabled = true;
+                    btn.textContent = 'Loading...';
+                    showToast('Seeding realistic demo dataset...', 'info', 3000);
+                    const res = await apiRequest('/api/demo/seed', { method: 'POST' });
+                    await loadChatHistory();
+                    appendAssistantMessage(`Demo data loaded! Seeded ${res.bills_seeded || 40} realistic bills across 3 months.`);
+                    showToast(`Demo data seeded (${res.bills_seeded || 40} bills)!`, 'success', 4000);
+                } catch (err) {
+                    showToast('Demo seeding failed: ' + (err.message || 'Error'), 'danger', 5000);
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = `${getIcon('zap', { size: 13 })} Load 40 Demo Bills`;
+                }
+            });
+        } else {
+            btn.addEventListener('click', () => {
+                const input = document.getElementById('chatInput');
+                if (input) {
+                    input.value = btn.textContent.trim();
+                    input.focus();
+                    document.getElementById('chatSendBtn')?.click();
+                }
+            });
+        }
+    });
+}
+
+function renderModeHubTiles(mode) {
+    const hubSubtitleText = document.getElementById('hubSubtitleText');
+    const hubCategoryTag = document.getElementById('hubCategoryTag');
+    const hubCardTitle = document.getElementById('hubCardTitle');
+    const hubCardDesc = document.getElementById('hubCardDesc');
+    const tilesContainer = document.getElementById('hubTilesContainer');
+
+    if (mode === 'business') {
+        if (hubSubtitleText) hubSubtitleText.textContent = 'Commercial overview & supplier tools';
+        if (hubCategoryTag) hubCategoryTag.textContent = 'Business Operations';
+        if (hubCardTitle) hubCardTitle.textContent = 'SpendSense Commercial Hub';
+        if (hubCardDesc) hubCardDesc.textContent = 'Manage wholesale suppliers, purchase invoices, accounts payable, tax credits, and commercial operating limits.';
+
+        if (tilesContainer) {
+            tilesContainer.innerHTML = `
+                <button type="button" class="hub-quick-tile" onclick="window.switchTab('screenBills'); window.toggleHub(false);">
+                    <span class="tile-icon">${getIcon('receipt', { size: 20 })}</span>
+                    <div class="tile-content">
+                        <div class="tile-title">Invoices & Purchase Bills</div>
+                        <div class="tile-desc">Supplier tax invoices, purchase orders & bills</div>
+                    </div>
+                    <span class="tile-chevron">${getIcon('chevron-right', { size: 16 })}</span>
+                </button>
+                <button type="button" class="hub-quick-tile" onclick="window.switchTab('screenInsights'); window.toggleHub(false);">
+                    <span class="tile-icon">${getIcon('bar-chart-3', { size: 20 })}</span>
+                    <div class="tile-content">
+                        <div class="tile-title">Business Insights & P&L</div>
+                        <div class="tile-desc">Gross expenses, supplier breakdown, and cash outflow</div>
+                    </div>
+                    <span class="tile-chevron">${getIcon('chevron-right', { size: 16 })}</span>
+                </button>
+                <button type="button" class="hub-quick-tile" onclick="window.switchTab('screenPriceTracker'); window.toggleHub(false);">
+                    <span class="tile-icon">${getIcon('store', { size: 20 })}</span>
+                    <div class="tile-content">
+                        <div class="tile-title">Suppliers & Wholesale Directory</div>
+                        <div class="tile-desc">Wholesale distributor rates & vendor price comparison</div>
+                    </div>
+                    <span class="tile-chevron">${getIcon('chevron-right', { size: 16 })}</span>
+                </button>
+                <button type="button" class="hub-quick-tile" onclick="window.switchTab('screenReminders'); window.toggleHub(false);">
+                    <span class="tile-icon">${getIcon('credit-card', { size: 20 })}</span>
+                    <div class="tile-content">
+                        <div class="tile-title">Accounts Payable & Dues</div>
+                        <div class="tile-desc">Supplier credit terms, Net-15/30 payment deadlines</div>
+                    </div>
+                    <span class="tile-chevron">${getIcon('chevron-right', { size: 16 })}</span>
+                </button>
+                <button type="button" class="hub-quick-tile" onclick="window.switchTab('screenBudgets'); window.toggleHub(false);">
+                    <span class="tile-icon">${getIcon('target', { size: 20 })}</span>
+                    <div class="tile-content">
+                        <div class="tile-title">Category Budgets & Overheads</div>
+                        <div class="tile-desc">Store rent, payroll, logistics & operating limits</div>
+                    </div>
+                    <span class="tile-chevron">${getIcon('chevron-right', { size: 16 })}</span>
+                </button>
+                <button type="button" class="hub-quick-tile" onclick="window.switchTab('screenSettings'); window.toggleHub(false);">
+                    <span class="tile-icon">${getIcon('file-text', { size: 20 })}</span>
+                    <div class="tile-content">
+                        <div class="tile-title">GST, Tax & CA Export</div>
+                        <div class="tile-desc">Tax summaries, HSN details, and accountant CSV backups</div>
+                    </div>
+                    <span class="tile-chevron">${getIcon('chevron-right', { size: 16 })}</span>
+                </button>
+            `;
+        }
+    } else {
+        if (hubSubtitleText) hubSubtitleText.textContent = 'Financial overview & tools';
+        if (hubCategoryTag) hubCategoryTag.textContent = 'Spend Intelligence';
+        if (hubCardTitle) hubCardTitle.textContent = 'SpendSense Project Hub';
+        if (hubCardDesc) hubCardDesc.textContent = 'Access all your spending insights, bills, budgets, price comparisons, and reminder tools without leaving the chat.';
+
+        if (tilesContainer) {
+            tilesContainer.innerHTML = `
+                <button type="button" class="hub-quick-tile" onclick="window.switchTab('screenBills'); window.toggleHub(false);">
+                    <span class="tile-icon">${getIcon('receipt', { size: 20 })}</span>
+                    <div class="tile-content">
+                        <div class="tile-title">Bills & Receipts</div>
+                        <div class="tile-desc">Manage, search, and review all parsed bills</div>
+                    </div>
+                    <span class="tile-chevron">${getIcon('chevron-right', { size: 16 })}</span>
+                </button>
+                <button type="button" class="hub-quick-tile" onclick="window.switchTab('screenInsights'); window.toggleHub(false);">
+                    <span class="tile-icon">${getIcon('bar-chart-3', { size: 20 })}</span>
+                    <div class="tile-content">
+                        <div class="tile-title">Insights & Trends</div>
+                        <div class="tile-desc">Monthly breakdown, top merchants, and KPIs</div>
+                    </div>
+                    <span class="tile-chevron">${getIcon('chevron-right', { size: 16 })}</span>
+                </button>
+                <button type="button" class="hub-quick-tile" onclick="window.switchTab('screenBudgets'); window.toggleHub(false);">
+                    <span class="tile-icon">${getIcon('target', { size: 20 })}</span>
+                    <div class="tile-content">
+                        <div class="tile-title">Category Budgets</div>
+                        <div class="tile-desc">Spending targets and 80% threshold warnings</div>
+                    </div>
+                    <span class="tile-chevron">${getIcon('chevron-right', { size: 16 })}</span>
+                </button>
+                <button type="button" class="hub-quick-tile" onclick="window.switchTab('screenPriceTracker'); window.toggleHub(false);">
+                    <span class="tile-icon">${getIcon('tag', { size: 20 })}</span>
+                    <div class="tile-content">
+                        <div class="tile-title">Price Tracker</div>
+                        <div class="tile-desc">Compare grocery prices across local kiranas</div>
+                    </div>
+                    <span class="tile-chevron">${getIcon('chevron-right', { size: 16 })}</span>
+                </button>
+                <button type="button" class="hub-quick-tile" onclick="window.switchTab('screenReminders'); window.toggleHub(false);">
+                    <span class="tile-icon">${getIcon('bell', { size: 20 })}</span>
+                    <div class="tile-content">
+                        <div class="tile-title">Reminders & Warranties</div>
+                        <div class="tile-desc">Warranty deadlines and bill payments</div>
+                    </div>
+                    <span class="tile-chevron">${getIcon('chevron-right', { size: 16 })}</span>
+                </button>
+                <button type="button" class="hub-quick-tile" onclick="window.switchTab('screenSettings'); window.toggleHub(false);">
+                    <span class="tile-icon">${getIcon('settings', { size: 20 })}</span>
+                    <div class="tile-content">
+                        <div class="tile-title">Settings & Data Controls</div>
+                        <div class="tile-desc">Categories, CSV export, and demo datasets</div>
+                    </div>
+                    <span class="tile-chevron">${getIcon('chevron-right', { size: 16 })}</span>
+                </button>
+            `;
+        }
+    }
 }
 
 /* ─────────────────────────────────────────────────────────────

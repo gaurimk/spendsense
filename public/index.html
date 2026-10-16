@@ -65,9 +65,36 @@
                     </svg>
                 </div>
                 <div class="brand-title">SpendSense</div>
-                <div class="mode-pill" id="modePill" title="Account Mode">
-                    <span class="mode-pill-dot" aria-hidden="true"></span>
-                    <span id="modePillText">Personal</span>
+                <div class="mode-dropdown-wrapper">
+                    <button class="mode-pill" id="modePill" type="button" aria-haspopup="true" aria-expanded="false" title="Click to switch workspace (Personal / Business)">
+                        <span class="mode-pill-dot" aria-hidden="true"></span>
+                        <span id="modePillText">Personal</span>
+                        <svg class="mode-pill-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-left: 2px; opacity: 0.7;"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+
+                    <div class="mode-dropdown" id="modeDropdown" role="menu" aria-hidden="true">
+                        <div class="mode-dropdown-header">Switch Workspace</div>
+                        <button class="mode-option-btn active" id="modeOptPersonal" type="button" data-mode="personal" role="menuitem">
+                            <div class="mode-option-icon">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            </div>
+                            <div class="mode-option-text">
+                                <strong>Personal Mode</strong>
+                                <span>Household, daily kirana, groceries & personal expense tracking</span>
+                            </div>
+                            <span class="mode-option-check">✓</span>
+                        </button>
+                        <button class="mode-option-btn" id="modeOptBusiness" type="button" data-mode="business" role="menuitem">
+                            <div class="mode-option-icon">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/><path d="M2 7h20"/><path d="M22 7v3a2 2 0 0 1-2 2v0a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12v0a2 2 0 0 1-2-2V7"/></svg>
+                            </div>
+                            <div class="mode-option-text">
+                                <strong>Business / Shop Mode</strong>
+                                <span>Wholesale suppliers, purchase invoices, payables & GST tax</span>
+                            </div>
+                            <span class="mode-option-check">✓</span>
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -194,8 +221,8 @@
                                     </svg>
                                 </span>
                                 <div>
-                                    <h1 class="module-title">SpendSense Assistant</h1>
-                                    <p class="module-desc">Kirana, store receipts and personal expense intelligence</p>
+                                    <h1 class="module-title" id="chatModuleTitle">SpendSense Assistant</h1>
+                                    <p class="module-desc" id="chatModuleDesc">Kirana, store receipts and personal expense intelligence</p>
                                 </div>
                             </div>
                             <span class="module-status-chip">
@@ -216,13 +243,13 @@
                         <div class="chat-messages" id="chatMessages">
                             <!-- Welcome Message Card -->
                             <div class="welcome-card" id="welcomeCard">
-                                <span class="web-label" style="font-size: 0.72rem; color: var(--color-label); margin-bottom: 0.25rem; display: block;">01 — SPEND ASSISTANT</span>
-                                <h2 class="welcome-title">Welcome to SpendSense</h2>
-                                <div class="welcome-prompt-serif">What needs to get tracked?</div>
-                                <p class="welcome-subtitle">
+                                <span class="web-label" id="welcomeWebLabel" style="font-size: 0.72rem; color: var(--color-label); margin-bottom: 0.25rem; display: block;">01 — SPEND ASSISTANT</span>
+                                <h2 class="welcome-title" id="welcomeTitle">Welcome to SpendSense</h2>
+                                <div class="welcome-prompt-serif" id="welcomePromptSerif">What needs to get tracked?</div>
+                                <p class="welcome-subtitle" id="welcomeSubtitle">
                                     Your personal expense assistant. Upload a supermarket receipt, restaurant bill, pharmacy slip, or fuel invoice, or tap a suggestion below to explore.
                                 </p>
-                                <div class="suggestion-chips">
+                                <div class="suggestion-chips" id="chatSuggestionChips">
                                     <button class="chip-btn" type="button">Where did I spend the most this month?</button>
                                     <button class="chip-btn" type="button">How much did I spend on snacks?</button>
                                     <button class="chip-btn" type="button">Which store is cheaper for milk?</button>
@@ -343,8 +370,8 @@
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
                     </span>
                     <div>
-                        <h3 class="hub-title-text">SpendSense Hub</h3>
-                        <span class="hub-subtitle-text">Financial overview & tools</span>
+                        <h3 class="hub-title-text" id="hubTitleText">SpendSense Hub</h3>
+                        <span class="hub-subtitle-text" id="hubSubtitleText">Financial overview & tools</span>
                     </div>
                 </div>
                 <div class="hub-panel-controls">
@@ -363,15 +390,15 @@
                     <div class="hub-placeholder-header-card">
                         <div class="hub-badge-row">
                             <span class="hub-chip-live">Connected</span>
-                            <span class="hub-category-tag">Spend Intelligence</span>
+                            <span class="hub-category-tag" id="hubCategoryTag">Spend Intelligence</span>
                         </div>
-                        <h4 style="margin: 0.35rem 0 0.2rem; font-size: 1.1rem; color: var(--color-text);">SpendSense Project Hub</h4>
-                        <p style="font-size: 0.82rem; color: var(--color-text-muted); margin: 0; line-height: 1.5;">Access all your spending insights, bills, budgets, price comparisons, and reminder tools without leaving the chat.</p>
+                        <h4 id="hubCardTitle" style="margin: 0.35rem 0 0.2rem; font-size: 1.1rem; color: var(--color-text);">SpendSense Project Hub</h4>
+                        <p id="hubCardDesc" style="font-size: 0.82rem; color: var(--color-text-muted); margin: 0; line-height: 1.5;">Access all your spending insights, bills, budgets, price comparisons, and reminder tools without leaving the chat.</p>
                     </div>
 
                     <div style="font-size: 0.78rem; font-weight: 700; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 1rem 0 0.5rem;">Explore Modules</div>
 
-                    <div class="hub-quick-tiles">
+                    <div class="hub-quick-tiles" id="hubTilesContainer">
                         <button type="button" class="hub-quick-tile" onclick="window.switchTab('screenBills'); window.toggleHub(false);">
                             <span class="tile-icon">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M13 16H8"/></svg>

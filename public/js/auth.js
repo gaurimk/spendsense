@@ -129,12 +129,10 @@ function updateUserUI() {
     const authBtn = document.getElementById('authNavBtn');
     const uploadPill = document.getElementById('uploadPill');
 
-    // Update Mode Pill (Personal vs Shop from settings)
-    if (modePillText) {
-        if (currentSettings && currentSettings.usage_type === 'shop') {
-            modePillText.textContent = 'Shop';
-        } else {
-            modePillText.textContent = 'Personal';
+    // Update Mode Pill from user settings if available
+    if (currentSettings && (currentSettings.usage_type === 'shop' || currentSettings.shop_mode)) {
+        if (typeof window.setAppMode === 'function') {
+            window.setAppMode('business', false);
         }
     }
 

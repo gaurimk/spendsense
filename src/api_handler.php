@@ -975,6 +975,29 @@ function handle_api_request(): void {
         ]);
     }
 
+    // 39. Update Account Mode (Personal vs Business / Shop)
+    if ($uri === '/api/settings/mode' && $method === 'POST') {
+        $userInfo = require_auth($pdo);
+        require_csrf();
+        $userId = $userInfo['user']['id'];
+
+        $mode = strtolower(trim((string)($input['mode'] ?? '')));
+        $shopMode = 0;
+        if ($mode === 'shop' || $mode === 'business' || !empty($input['shop_mode'])) {
+            $shopMode = 1;
+        }
+
+        $now = gmdate('Y-m-d H:i:s');
+        $stmt = $pdo->prepare("UPDATE settings SET shop_mode = ?, updated_at = ? WHERE user_id = ?");
+        $stmt->execute([$shopMode, $now, $userId]);
+
+        json_response([
+            'success' => true,
+            'shop_mode' => (bool)$shopMode,
+            'mode' => $shopMode ? 'business' : 'personal',
+        ]);
+    }
+
     // Unmatched API route
     json_error("Endpoint '{$uri}' not found.", 404, 'NOT_FOUND');
 }

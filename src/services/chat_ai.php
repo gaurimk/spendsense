@@ -631,6 +631,81 @@ function answer_user_query_fallback(
         ];
     }
 
+    if (str_contains($ql, 'payable') || str_contains($ql, 'vendor') || str_contains($ql, 'supplier payable') || str_contains($ql, 'pending due')) {
+        $remData = query_list_reminders_for_chat($pdo, $userId);
+        $totalCount = (int)($remData['counts']['total'] ?? count($remData['reminders'] ?? []));
+        if ($totalCount === 0) {
+            return [
+                'text' => "You have **no pending payables or supplier dues** recorded. When you save supplier invoices with credit terms (e.g. Net-15 or Net-30), payment deadlines will appear here.",
+                'function_called' => 'list_reminders',
+                'data' => $remData,
+            ];
+        }
+        $text = "Here are your pending supplier payables and due dates ({$totalCount}):\n\n";
+        foreach ($remData['reminders'] as $r) {
+            $text .= "• **{$r['title']}** — Due: {$r['due_date']} ({$r['days_remaining']})\n";
+        }
+        return [
+            'text' => $text,
+            'function_called' => 'list_reminders',
+            'data' => $remData,
+        ];
+    }
+
+    if (str_contains($ql, 'gst') || str_contains($ql, 'tax')) {
+        $taxStmt = $pdo->prepare("
+            SELECT 
+                COUNT(*) as bill_count,
+                ROUND(COALESCE(SUM(tax_amount), 0), 2) as total_tax,
+                ROUND(COALESCE(SUM(subtotal), 0), 2) as total_subtotal,
+                ROUND(COALESCE(SUM(grand_total), 0), 2) as total_grand
+            FROM bills
+            WHERE user_id = ? AND strftime('%Y-%m', bill_date) = strftime('%Y-%m', 'now')
+        ");
+        $taxStmt->execute([$userId]);
+        $taxInfo = $taxStmt->fetch();
+        $totalTax = number_format((float)($taxInfo['total_tax'] ?? 0), 2);
+        $totalGrand = number_format((float)($taxInfo['total_grand'] ?? 0), 2);
+        $totalSub = number_format((float)($taxInfo['total_subtotal'] ?? 0), 2);
+        $count = (int)($taxInfo['bill_count'] ?? 0);
+
+        if ($count === 0) {
+            $text = "No tax invoices or bills recorded for this month yet. Upload supplier invoices or purchase bills to compute your GST and tax breakdown.";
+        } else {
+            $text = "Here is your GST & Tax summary for this month across **{$count} bill(s)**:\n\n"
+                  . "• **Taxable Value (Subtotal):** ₹{$totalSub}\n"
+                  . "• **Total GST / Tax Paid:** ₹{$totalTax}\n"
+                  . "• **Gross Total:** ₹{$totalGrand}\n\n"
+                  . "You can export the full line items CSV in Settings to claim your Input Tax Credit (ITC).";
+        }
+        return ['text' => $text];
+    }
+
+    if (str_contains($ql, 'wholesale') || str_contains($ql, 'supplier') || str_contains($ql, 'distributor')) {
+        $merchStmt = $pdo->prepare("
+            SELECT merchant_name, COUNT(*) as bill_count, ROUND(SUM(grand_total), 2) as total_amount, ROUND(AVG(grand_total), 2) as avg_order
+            FROM bills
+            WHERE user_id = ? AND merchant_name IS NOT NULL
+            GROUP BY merchant_name
+            ORDER BY total_amount DESC
+            LIMIT 5
+        ");
+        $merchStmt->execute([$userId]);
+        $suppliers = $merchStmt->fetchAll();
+
+        if (empty($suppliers)) {
+            $text = "You haven't recorded any supplier or wholesale purchase bills yet. Upload an invoice to start tracking distributor rates!";
+        } else {
+            $text = "Here are your top suppliers and wholesale vendors:\n\n";
+            foreach ($suppliers as $s) {
+                $tot = number_format((float)$s['total_amount'], 2);
+                $avg = number_format((float)$s['avg_order'], 2);
+                $text .= "• **{$s['merchant_name']}**: ₹{$tot} across {$s['bill_count']} orders (Avg: ₹{$avg})\n";
+            }
+        }
+        return ['text' => $text];
+    }
+
     if (str_contains($ql, 'recurring') || str_contains($ql, 'repeat') || str_contains($ql, 'subscription') || str_contains($ql, 'regularly')) {
         $recData = query_recurring_spend($pdo, $userId);
         if (empty($recData['items'])) {
