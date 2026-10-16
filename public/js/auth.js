@@ -121,15 +121,27 @@ function getInitials(name) {
 function updateUserUI() {
     const userMenuContainer = document.getElementById('userMenuContainer');
     const userAvatarInitials = document.getElementById('userAvatarInitials');
+    const railAvatarInitials = document.getElementById('railAvatarInitials');
+    const modePillText = document.getElementById('modePillText');
     const userMenuName = document.getElementById('userMenuName');
     const dropdownUserName = document.getElementById('dropdownUserName');
     const dropdownUserEmail = document.getElementById('dropdownUserEmail');
     const authBtn = document.getElementById('authNavBtn');
     const uploadPill = document.getElementById('uploadPill');
 
+    // Update Mode Pill (Personal vs Shop from settings)
+    if (modePillText) {
+        if (currentSettings && currentSettings.usage_type === 'shop') {
+            modePillText.textContent = 'Shop';
+        } else {
+            modePillText.textContent = 'Personal';
+        }
+    }
+
     if (currentUser) {
         const initials = getInitials(currentUser.full_name);
         if (userAvatarInitials) userAvatarInitials.textContent = initials;
+        if (railAvatarInitials) railAvatarInitials.textContent = initials;
         if (userMenuName) userMenuName.textContent = currentUser.full_name;
         if (dropdownUserName) dropdownUserName.textContent = currentUser.full_name;
         if (dropdownUserEmail) dropdownUserEmail.textContent = currentUser.email;
@@ -142,6 +154,7 @@ function updateUserUI() {
         }
         closeAuthModal();
     } else {
+        if (railAvatarInitials) railAvatarInitials.textContent = 'U';
         if (userMenuContainer) userMenuContainer.style.display = 'none';
         if (uploadPill) uploadPill.style.display = 'none';
         if (authBtn) {

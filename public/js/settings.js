@@ -308,13 +308,13 @@ async function loadCategoriesList() {
             card.style.alignItems = 'center';
             card.style.gap = '0.5rem';
 
-            const colorDot = `<span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: ${cat.color || '#4f46e5'}; margin-right: 0.4rem;"></span>`;
+            const tagBadge = `<span style="display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: var(--radius-xs, 6px); background: var(--color-primary-subtle); color: var(--color-primary); margin-right: 0.5rem; flex-shrink: 0;">${getIcon('tag', { size: 12 })}</span>`;
             const itemCount = Number(cat.item_count || 0);
 
             card.innerHTML = `
                 <div style="flex: 1; min-width: 0;">
                     <div style="display: flex; align-items: center; font-weight: 600; color: var(--color-text); font-size: 0.92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                        ${colorDot} ${escapeHtml(cat.name)}
+                        ${tagBadge} <span>${escapeHtml(cat.name)}</span>
                     </div>
                     <div style="font-size: 0.75rem; color: var(--color-text-muted); margin-top: 0.2rem;" class="tabular-nums">
                         ${itemCount} item${itemCount === 1 ? '' : 's'} recorded • ${formatCurrency(Number(cat.total_spent || 0))} spent

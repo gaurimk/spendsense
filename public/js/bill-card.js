@@ -8,6 +8,7 @@ import { apiRequest } from './api.js';
 import { openEditModal } from './bill-modal.js';
 import { appendAssistantMessage, appendInsightMessage } from './chat.js';
 import { setUploadLimit } from './auth.js';
+import { getIcon } from './icons.js';
 
 export function renderBillCard(draftData, containerElement) {
     const card = document.createElement('div');
@@ -60,11 +61,11 @@ export function renderBillCard(draftData, containerElement) {
 
     let docTypeBadge = '';
     if (isHandwritten) {
-        docTypeBadge = `<span class="doc-badge handwritten" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 999px; margin-left: 0.4rem;">✍️ Handwritten — please double-check</span>`;
+        docTypeBadge = `<span class="doc-badge handwritten" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.35); font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 999px; margin-left: 0.4rem; display: inline-flex; align-items: center; gap: 0.25rem;">${getIcon('pencil', { size: 12 })} Handwritten — please double-check</span>`;
     } else if (isLowLegibility) {
-        docTypeBadge = `<span class="doc-badge poor-legibility" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 999px; margin-left: 0.4rem;">⚠️ Low Legibility</span>`;
+        docTypeBadge = `<span class="doc-badge poor-legibility" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.35); font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 999px; margin-left: 0.4rem; display: inline-flex; align-items: center; gap: 0.25rem;">${getIcon('alert-triangle', { size: 12 })} Low Legibility</span>`;
     } else if (isScreenPhoto) {
-        docTypeBadge = `<span class="doc-badge screen-photo" style="background: rgba(99, 102, 241, 0.2); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.4); font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 999px; margin-left: 0.4rem;">🖥️ Photo of Screen</span>`;
+        docTypeBadge = `<span class="doc-badge screen-photo" style="background: var(--color-primary-subtle); color: var(--color-primary); border: 1px solid var(--color-border); font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 999px; margin-left: 0.4rem; display: inline-flex; align-items: center; gap: 0.25rem;">${getIcon('camera', { size: 12 })} Photo of Screen</span>`;
     }
 
     const confClass = (conf) => conf === 'low' ? 'confidence-low' : (conf === 'medium' ? 'confidence-medium' : '');
@@ -72,14 +73,14 @@ export function renderBillCard(draftData, containerElement) {
     let headerHtml = `
         <div class="bill-card-header">
             <div>
-                <div class="bill-merchant ${confClass(draftData.merchant_name_confidence)}" style="display: flex; align-items: center; flex-wrap: wrap;">
-                    <span>🧾</span> <span>${escapeHtml(merchantName)}</span>
+                <div class="bill-merchant ${confClass(draftData.merchant_name_confidence)}" style="display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem;">
+                    <span style="display: inline-flex; color: var(--color-primary);">${getIcon('receipt', { size: 16 })}</span> <span>${escapeHtml(merchantName)}</span>
                     ${docTypeBadge}
                 </div>
-                <div class="bill-meta" style="margin-top: 0.25rem;">
-                    <span class="${confClass(draftData.bill_date_confidence)}">📅 ${escapeHtml(billDate)}</span>
-                    ${draftData.bill_number ? `<span class="${confClass(draftData.bill_number_confidence)}">🏷️ ${escapeHtml(draftData.bill_number)}</span>` : ''}
-                    <span class="${confClass(draftData.payment_method_confidence)}">💳 ${escapeHtml(paymentMethod || 'Not stated')}</span>
+                <div class="bill-meta" style="margin-top: 0.25rem; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+                    <span class="${confClass(draftData.bill_date_confidence)}" style="display: inline-flex; align-items: center; gap: 0.25rem;">${getIcon('calendar', { size: 12 })} ${escapeHtml(billDate)}</span>
+                    ${draftData.bill_number ? `<span class="${confClass(draftData.bill_number_confidence)}" style="display: inline-flex; align-items: center; gap: 0.25rem;">${getIcon('tag', { size: 12 })} ${escapeHtml(draftData.bill_number)}</span>` : ''}
+                    <span class="${confClass(draftData.payment_method_confidence)}" style="display: inline-flex; align-items: center; gap: 0.25rem;">${getIcon('credit-card', { size: 12 })} ${escapeHtml(paymentMethod || 'Not stated')}</span>
                 </div>
             </div>
             <div class="bill-total-badge">
@@ -88,7 +89,7 @@ export function renderBillCard(draftData, containerElement) {
                     ${currencySymbol}${grandTotal}
                 </div>
                 ${hasAnySplit ? `
-                    <div style="font-size: 0.75rem; font-weight: 700; color: #34d399; margin-top: 0.25rem; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); padding: 0.15rem 0.4rem; border-radius: 4px; text-align: center;">
+                    <div style="font-size: 0.75rem; font-weight: 700; color: var(--color-primary); margin-top: 0.25rem; background: var(--color-primary-subtle); border: 1px solid var(--color-border); padding: 0.15rem 0.4rem; border-radius: var(--radius-xs); text-align: center;">
                         My Share: ${currencySymbol}${myShareGrandTotal.toFixed(2)}
                     </div>
                 ` : ''}
@@ -102,13 +103,13 @@ export function renderBillCard(draftData, containerElement) {
     if (warnings.length > 0) {
         warningsHtml = `<div class="bill-warnings">`;
         warnings.forEach((w, wIdx) => {
-            const icon = w.type === 'duplicate' ? '⚠️' : (w.type === 'arithmetic' ? '🔢' : '🔍');
+            const iconName = w.type === 'duplicate' ? 'alert-triangle' : (w.type === 'arithmetic' ? 'alert-circle' : 'info');
             const isMismatch = w.code === 'SUM_LINES_MISMATCH';
 
             warningsHtml += `
                 <div class="warning-item" style="display: flex; flex-direction: column; align-items: flex-start;">
                     <div style="display: flex; align-items: center; gap: 0.4rem;">
-                        <span class="warning-icon">${icon}</span>
+                        <span class="warning-icon" style="display: inline-flex; align-items: center;">${getIcon(iconName, { size: 14 })}</span>
                         <span>${escapeHtml(w.message)}</span>
                     </div>
                     ${isMismatch ? `
@@ -175,22 +176,22 @@ export function renderBillCard(draftData, containerElement) {
                         <div class="item-right" style="text-align: right;">
                             <div style="font-weight: 600;">${currencySymbol}${lineTotal}</div>
                             ${curSplit !== 'mine' ? `
-                                <div style="font-size: 0.72rem; color: #34d399;">
+                                <div style="font-size: 0.72rem; color: var(--color-primary); font-weight: 600;">
                                     My share: ${currencySymbol}${Number(it.my_share_amount || 0).toFixed(2)}
                                 </div>
                             ` : ''}
                         </div>
                     </div>
                     <!-- Split Controls -->
-                    <div class="split-controls" style="display: flex; gap: 0.3rem; align-items: center; padding-top: 0.2rem; border-top: 1px dashed rgba(255,255,255,0.08);">
+                    <div class="split-controls" style="display: flex; gap: 0.3rem; align-items: center; padding-top: 0.2rem; border-top: 1px dashed var(--color-border);">
                         <span style="font-size: 0.72rem; color: var(--text-muted); margin-right: 0.2rem;">Split:</span>
-                        <button type="button" class="btn-split-toggle ${curSplit === 'mine' ? 'active' : ''}" data-idx="${it.originalIndex}" data-split="mine" style="font-size: 0.7rem; padding: 0.15rem 0.45rem; border-radius: 4px; border: 1px solid ${curSplit === 'mine' ? 'var(--accent-green)' : 'var(--border)'}; background: ${curSplit === 'mine' ? 'rgba(16, 185, 129, 0.2)' : 'transparent'}; color: ${curSplit === 'mine' ? '#34d399' : 'var(--text-muted)'}; cursor: pointer;">
+                        <button type="button" class="btn-split-toggle ${curSplit === 'mine' ? 'active' : ''}" data-idx="${it.originalIndex}" data-split="mine" style="font-size: 0.7rem; padding: 0.15rem 0.45rem; border-radius: var(--radius-xs); border: 1px solid ${curSplit === 'mine' ? 'var(--color-primary)' : 'var(--color-border)'}; background: ${curSplit === 'mine' ? 'var(--color-primary-subtle)' : 'transparent'}; color: ${curSplit === 'mine' ? 'var(--color-primary)' : 'var(--text-muted)'}; cursor: pointer; font-weight: 500;">
                             Mine (100%)
                         </button>
-                        <button type="button" class="btn-split-toggle ${curSplit === 'shared' ? 'active' : ''}" data-idx="${it.originalIndex}" data-split="shared" style="font-size: 0.7rem; padding: 0.15rem 0.45rem; border-radius: 4px; border: 1px solid ${curSplit === 'shared' ? '#818cf8' : 'var(--border)'}; background: ${curSplit === 'shared' ? 'rgba(99, 102, 241, 0.2)' : 'transparent'}; color: ${curSplit === 'shared' ? '#a5b4fc' : 'var(--text-muted)'}; cursor: pointer;">
+                        <button type="button" class="btn-split-toggle ${curSplit === 'shared' ? 'active' : ''}" data-idx="${it.originalIndex}" data-split="shared" style="font-size: 0.7rem; padding: 0.15rem 0.45rem; border-radius: var(--radius-xs); border: 1px solid ${curSplit === 'shared' ? 'var(--color-primary)' : 'var(--color-border)'}; background: ${curSplit === 'shared' ? 'var(--color-primary-subtle)' : 'transparent'}; color: ${curSplit === 'shared' ? 'var(--color-primary)' : 'var(--text-muted)'}; cursor: pointer; font-weight: 500;">
                             Shared (50%)
                         </button>
-                        <button type="button" class="btn-split-toggle ${curSplit === 'someone_else' ? 'active' : ''}" data-idx="${it.originalIndex}" data-split="someone_else" style="font-size: 0.7rem; padding: 0.15rem 0.45rem; border-radius: 4px; border: 1px solid ${curSplit === 'someone_else' ? '#f87171' : 'var(--border)'}; background: ${curSplit === 'someone_else' ? 'rgba(239, 68, 68, 0.2)' : 'transparent'}; color: ${curSplit === 'someone_else' ? '#fca5a5' : 'var(--text-muted)'}; cursor: pointer;">
+                        <button type="button" class="btn-split-toggle ${curSplit === 'someone_else' ? 'active' : ''}" data-idx="${it.originalIndex}" data-split="someone_else" style="font-size: 0.7rem; padding: 0.15rem 0.45rem; border-radius: var(--radius-xs); border: 1px solid ${curSplit === 'someone_else' ? 'var(--color-danger)' : 'var(--color-border)'}; background: ${curSplit === 'someone_else' ? 'var(--color-danger-subtle)' : 'transparent'}; color: ${curSplit === 'someone_else' ? 'var(--color-danger)' : 'var(--text-muted)'}; cursor: pointer; font-weight: 500;">
                             Someone else's (0%)
                         </button>
                     </div>
@@ -203,14 +204,14 @@ export function renderBillCard(draftData, containerElement) {
     // 5. Actions Footer
     const actionsHtml = `
         <div class="bill-card-actions">
-            <button class="btn btn-success btn-save-bill" type="button">
-                <span>✓</span> Looks right, save it
+            <button class="btn btn-primary btn-save-bill" type="button" style="display: inline-flex; align-items: center; gap: 0.35rem;">
+                ${getIcon('check', { size: 14 })} Looks right, save it
             </button>
-            <button class="btn btn-secondary btn-edit-bill" type="button">
-                <span>✎</span> Edit details
+            <button class="btn btn-secondary btn-edit-bill" type="button" style="display: inline-flex; align-items: center; gap: 0.35rem;">
+                ${getIcon('pencil', { size: 14 })} Edit details
             </button>
-            <button class="btn btn-danger-outline btn-discard-bill" type="button">
-                <span>✕</span> Discard
+            <button class="btn btn-danger-outline btn-discard-bill" type="button" style="display: inline-flex; align-items: center; gap: 0.35rem;">
+                ${getIcon('x', { size: 14 })} Discard
             </button>
         </div>
     `;
@@ -306,15 +307,17 @@ async function handleSaveBill(billData, cardElement) {
             if (response.suggested_reminders && response.suggested_reminders.length > 0) {
                 remListHtml = `
                     <div style="margin-top: 0.6rem; display: flex; flex-direction: column; gap: 0.4rem; width: 100%;">
-                        <div style="font-size: 0.78rem; font-weight: 700; color: #a5b4fc; text-transform: uppercase;">⏰ Suggested Reminders:</div>
+                        <div style="font-size: 0.78rem; font-weight: 700; color: var(--color-primary); text-transform: uppercase; display: flex; align-items: center; gap: 0.35rem;">
+                            ${getIcon('bell', { size: 13 })} Suggested Reminders:
+                        </div>
                         ${response.suggested_reminders.map((rem, rIdx) => `
-                            <div style="background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 6px; padding: 0.5rem 0.75rem; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                            <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 0.5rem 0.75rem; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
                                 <div>
-                                    <div style="font-size: 0.85rem; font-weight: 600; color: #ffffff;">${escapeHtml(rem.title)}</div>
+                                    <div style="font-size: 0.85rem; font-weight: 600; color: var(--color-text);">${escapeHtml(rem.title)}</div>
                                     <div style="font-size: 0.75rem; color: var(--text-muted);">${escapeHtml(rem.notes || '')} • Due: ${escapeHtml(rem.due_date)}</div>
                                 </div>
-                                <button type="button" class="btn btn-primary btn-add-sug-rem" data-rem-idx="${rIdx}" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; white-space: nowrap;">
-                                    ➕ Add Reminder
+                                <button type="button" class="btn btn-primary btn-add-sug-rem" data-rem-idx="${rIdx}" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; white-space: nowrap; display: inline-flex; align-items: center; gap: 0.25rem;">
+                                    ${getIcon('plus', { size: 12 })} Add Reminder
                                 </button>
                             </div>
                         `).join('')}
@@ -324,8 +327,8 @@ async function handleSaveBill(billData, cardElement) {
 
             actionsBar.innerHTML = `
                 <div style="display: flex; flex-direction: column; width: 100%;">
-                    <div style="color: var(--accent-green); font-weight: 600; font-size: 0.9rem; display: flex; align-items: center; gap: 0.4rem;">
-                        <span>✓</span> Bill saved successfully to your records.
+                    <div style="color: var(--color-primary); font-weight: 600; font-size: 0.9rem; display: flex; align-items: center; gap: 0.4rem;">
+                        ${getIcon('check-circle', { size: 16 })} Bill saved successfully to your records.
                     </div>
                     ${remListHtml}
                 </div>
@@ -345,10 +348,10 @@ async function handleSaveBill(billData, cardElement) {
                                 method: 'POST',
                                 body: JSON.stringify(remData),
                             });
-                            remBtn.textContent = '✓ Added';
-                            remBtn.style.background = 'rgba(16, 185, 129, 0.2)';
-                            remBtn.style.color = '#34d399';
-                            remBtn.style.borderColor = 'var(--accent-green)';
+                            remBtn.innerHTML = `${getIcon('check', { size: 12 })} Added`;
+                            remBtn.style.background = 'var(--color-primary-subtle)';
+                            remBtn.style.color = 'var(--color-primary)';
+                            remBtn.style.borderColor = 'var(--color-primary)';
                         } catch (re) {
                             remBtn.disabled = false;
                             remBtn.textContent = 'Failed';
@@ -371,7 +374,7 @@ async function handleSaveBill(billData, cardElement) {
     } catch (err) {
         console.error('Error saving bill:', err);
         saveBtn.disabled = false;
-        saveBtn.innerHTML = '<span>✓</span> Looks right, save it';
+        saveBtn.innerHTML = `${getIcon('check', { size: 14 })} Looks right, save it`;
         alert('Failed to save bill: ' + (err.message || 'Unknown error'));
     }
 }
@@ -393,8 +396,8 @@ async function handleDiscardBill(billData, cardElement) {
     const actionsBar = cardElement.querySelector('.bill-card-actions');
     if (actionsBar) {
         actionsBar.innerHTML = `
-            <div style="color: var(--text-muted); font-size: 0.85rem; font-style: italic;">
-                ✕ Bill discarded.
+            <div style="color: var(--text-muted); font-size: 0.85rem; font-style: italic; display: flex; align-items: center; gap: 0.35rem;">
+                ${getIcon('x', { size: 14 })} Bill discarded.
             </div>
         `;
     }

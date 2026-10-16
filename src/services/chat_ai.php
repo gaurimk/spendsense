@@ -413,9 +413,15 @@ function answer_user_query_fallback(
 
     if (str_contains($ql, 'biggest') || str_contains($ql, 'largest') || str_contains($ql, 'highest bill')) {
         $data = query_list_bills($pdo, $userId, ['order_by' => 'total_desc', 'limit' => 5]);
-        $text = "Here are your top 5 biggest bills:\n\n";
-        foreach ($data['bills'] as $idx => $b) {
-            $text .= ($idx + 1) . ". **{$b['merchant_name']}** — ₹" . number_format((float)$b['grand_total'], 2) . " on {$b['bill_date']}\n";
+        if (empty($data['bills'])) {
+            $text = "You haven't recorded any bills yet. Upload a receipt or click **Load 40 Demo Bills** to see your biggest bills.";
+        } else {
+            $count = count($data['bills']);
+            $label = $count === 5 ? "top 5 biggest bills" : "{$count} recorded bills";
+            $text = "Here are your {$label}:\n\n";
+            foreach ($data['bills'] as $idx => $b) {
+                $text .= ($idx + 1) . ". **{$b['merchant_name']}** — ₹" . number_format((float)$b['grand_total'], 2) . " on {$b['bill_date']}\n";
+            }
         }
         return [
             'text' => $text,

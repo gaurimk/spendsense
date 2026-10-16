@@ -27,27 +27,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 1. Initialize Theme (Light / Dark)
     initTheme();
 
-    // 2. Setup Tab and Mobile Navigation
+    // 2. Setup Navigation (Rail, Tabs & Mobile)
     setupTabNavigation();
 
-    // 3. Setup User Menu Dropdown
+    // 3. Setup Project Hub slide-out
+    initHub();
+
+    // 4. Setup Share button
+    setupShareButton();
+
+    // 5. Setup User Menu Dropdown
     setupUserMenu();
 
-    // 4. Setup Auth Form Listeners
+    // 6. Setup Auth Form Listeners
     setupAuthListeners();
 
-    // 5. Setup Demo Data Loaders
+    // 7. Setup Demo Data Loaders
     setupDemoDataButtons();
 
-    // 6. Initialize Chat
+    // 8. Initialize Chat
     initChat();
 
-    // 7. Ensure Chat screen is active
+    // 9. Ensure Chat screen is active
     if (window.switchTab) {
         window.switchTab('screenChat');
     }
 
-    // 8. Check Auth State and load categories & history
+    // 10. Check Auth State and load categories & history
     try {
         const isAuthed = await checkAuthState();
         if (isAuthed) {
@@ -61,7 +67,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // 9. Register PWA Service Worker
+    // 11. Register PWA Service Worker
     if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost')) {
         navigator.serviceWorker.register('/sw.js').catch(err => {
             console.warn('Service worker registration note:', err);
@@ -70,10 +76,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 /* ─────────────────────────────────────────────────────────────
-   Theme Management (Dark / Light with localStorage & system preference)
+   Theme Management (Dark / Light with safe localStorage & system preference)
 ───────────────────────────────────────────────────────────── */
 function initTheme() {
-    const savedTheme = localStorage.getItem('spendsense_theme');
+    let savedTheme = null;
+    try {
+        savedTheme = localStorage.getItem('spendsense_theme');
+    } catch (e) {
+        console.warn('localStorage read error:', e);
+    }
     const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     const initialTheme = savedTheme || (systemPrefersDark ? 'dark' : 'light');
 
@@ -85,14 +96,24 @@ function initTheme() {
             const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
             const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
             applyTheme(nextTheme);
-            localStorage.setItem('spendsense_theme', nextTheme);
+            try {
+                localStorage.setItem('spendsense_theme', nextTheme);
+            } catch (e) {
+                console.warn('localStorage write error:', e);
+            }
             showToast(`Switched to ${nextTheme} theme`, 'info', 2000);
         });
     }
 
     // Listen to OS preference changes if user hasn't explicitly set preference
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-        if (!localStorage.getItem('spendsense_theme')) {
+        let hasSaved = false;
+        try {
+            hasSaved = !!localStorage.getItem('spendsense_theme');
+        } catch {
+            hasSaved = false;
+        }
+        if (!hasSaved) {
             applyTheme(e.matches ? 'dark' : 'light');
         }
     });
@@ -113,16 +134,155 @@ function applyTheme(theme) {
 }
 
 /* ─────────────────────────────────────────────────────────────
+   Hub Panel Management (Slide-out split view & edge tab)
+───────────────────────────────────────────────────────────── */
+function initHub() {
+    const hubPanel = document.getElementById('hubPanel');
+    const edgeTab = document.getElementById('edgeHubTab');
+    const railBtnHub = document.getElementById('railBtnHub');
+    const mobileNavHub = document.getElementById('mobileNavHub');
+    const btnMinimize = document.getElementById('btnHubMinimize');
+    const btnExpand = document.getElementById('btnHubExpand');
+    const appWorkspace = document.getElementById('appWorkspace');
+
+    if (!hubPanel) return;
+
+    window.toggleHub = function(forceState) {
+        const isCurrentlyOpen = hubPanel.classList.contains('open');
+        const shouldOpen = (typeof forceState === 'boolean') ? forceState : !isCurrentlyOpen;
+
+        if (shouldOpen) {
+            hubPanel.classList.add('open');
+            hubPanel.setAttribute('aria-hidden', 'false');
+            if (appWorkspace) appWorkspace.classList.add('hub-open');
+            if (edgeTab) {
+                edgeTab.classList.add('active');
+                edgeTab.setAttribute('aria-expanded', 'true');
+            }
+            if (railBtnHub) railBtnHub.classList.add('active');
+            if (mobileNavHub) mobileNavHub.classList.add('active');
+
+            try {
+                localStorage.setItem('spendsense_hub_open', 'true');
+            } catch (e) {
+                console.warn('Storage blocked:', e);
+            }
+
+            if (btnMinimize) btnMinimize.focus();
+        } else {
+            hubPanel.classList.remove('open');
+            hubPanel.classList.remove('expanded');
+            hubPanel.setAttribute('aria-hidden', 'true');
+            if (appWorkspace) appWorkspace.classList.remove('hub-open');
+            if (edgeTab) {
+                edgeTab.classList.remove('active');
+                edgeTab.setAttribute('aria-expanded', 'false');
+            }
+            if (railBtnHub) railBtnHub.classList.remove('active');
+            if (mobileNavHub) mobileNavHub.classList.remove('active');
+
+            try {
+                localStorage.setItem('spendsense_hub_open', 'false');
+            } catch (e) {
+                console.warn('Storage blocked:', e);
+            }
+
+            if (edgeTab) edgeTab.focus();
+        }
+    };
+
+    if (edgeTab) {
+        edgeTab.addEventListener('click', () => window.toggleHub());
+    }
+
+    if (railBtnHub) {
+        railBtnHub.addEventListener('click', () => window.toggleHub());
+    }
+
+    if (mobileNavHub) {
+        mobileNavHub.addEventListener('click', () => window.toggleHub());
+    }
+
+    if (btnMinimize) {
+        btnMinimize.addEventListener('click', () => window.toggleHub(false));
+    }
+
+    if (btnExpand) {
+        btnExpand.addEventListener('click', () => {
+            const isExpanded = hubPanel.classList.toggle('expanded');
+            const spanText = btnExpand.querySelector('span');
+            if (spanText) {
+                spanText.textContent = isExpanded ? 'Collapse' : 'Expand';
+            }
+        });
+    }
+
+    // Keyboard shortcut: Esc closes Hub panel
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && hubPanel.classList.contains('open')) {
+            window.toggleHub(false);
+        }
+    });
+
+    // Check saved state from localStorage (desktop only)
+    try {
+        const savedState = localStorage.getItem('spendsense_hub_open');
+        if (savedState === 'true' && window.innerWidth > 900) {
+            window.toggleHub(true);
+        }
+    } catch (e) {
+        console.warn('Storage access note:', e);
+    }
+}
+
+function setupShareButton() {
+    const shareBtn = document.getElementById('shareBtn');
+    if (!shareBtn) return;
+
+    shareBtn.addEventListener('click', async () => {
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: 'SpendSense',
+                    text: 'SpendSense — Financial Intelligence & Expense Assistant',
+                    url: window.location.href,
+                });
+                return;
+            } catch {
+                // Ignore cancel or fallback
+            }
+        }
+
+        try {
+            await navigator.clipboard.writeText(window.location.href);
+            showToast('SpendSense link copied to clipboard', 'success', 2500);
+        } catch {
+            showToast('SpendSense URL: ' + window.location.href, 'info', 3000);
+        }
+    });
+}
+
+/* ─────────────────────────────────────────────────────────────
    Navigation Management (Desktop Tabs + Mobile Bottom Nav + Sheet)
 ───────────────────────────────────────────────────────────── */
 function setupTabNavigation() {
     const desktopTabs = document.querySelectorAll('.nav-tabs .tab-btn[data-screen]');
+    const railItems = document.querySelectorAll('.app-icon-rail .rail-btn[data-screen]');
     const mobileNavItems = document.querySelectorAll('.mobile-nav-bar .mobile-nav-item[data-screen]');
     const sheetItems = document.querySelectorAll('.mobile-more-sheet .sheet-item-btn[data-screen]');
     const screens = document.querySelectorAll('.screen-view');
 
     const moreBtn = document.getElementById('mobileMoreBtn');
     const moreSheet = document.getElementById('mobileMoreSheet');
+    const railAvatarBtn = document.getElementById('railAvatarBtn');
+    const userMenuBtn = document.getElementById('userMenuBtn');
+
+    if (railAvatarBtn && userMenuBtn) {
+        railAvatarBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            userMenuBtn.click();
+        });
+    }
 
     window.switchTab = function(targetScreenId) {
         if (!targetScreenId) return;
@@ -133,6 +293,15 @@ function setupTabNavigation() {
                 t.classList.add('active');
             } else {
                 t.classList.remove('active');
+            }
+        });
+
+        // Slim rail update
+        railItems.forEach(r => {
+            if (r.dataset.screen === targetScreenId) {
+                r.classList.add('active');
+            } else {
+                r.classList.remove('active');
             }
         });
 
@@ -184,6 +353,15 @@ function setupTabNavigation() {
             loadSettingsTab();
         }
     };
+
+    // Rail click handlers
+    railItems.forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.preventDefault();
+            const target = item.dataset.screen;
+            if (target) window.switchTab(target);
+        });
+    });
 
     // Desktop click handlers
     desktopTabs.forEach(tab => {

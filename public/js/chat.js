@@ -46,33 +46,157 @@ export function initChat() {
         });
     }
 
-    // Attach file button (supports up to 3 photos for long receipts)
-    if (attachBtn && fileInput) {
-        attachBtn.addEventListener('click', () => fileInput.click());
+    // File upload change listener (single or multi-photo receipt upload)
+    if (fileInput) {
         fileInput.addEventListener('change', () => {
-            if (fileInput.files.length > 0) {
+            if (fileInput.files && fileInput.files.length > 0) {
                 uploadBillFile(fileInput.files);
                 fileInput.value = '';
             }
         });
     }
 
-    // Camera capture button (supports both laptop webcam and mobile camera)
-    if (cameraBtn && cameraInput) {
-        cameraBtn.addEventListener('click', () => openLiveCameraModal(cameraInput));
+    // Camera capture change listener
+    if (cameraInput) {
         cameraInput.addEventListener('change', () => {
-            if (cameraInput.files.length > 0) {
+            if (cameraInput.files && cameraInput.files.length > 0) {
                 uploadBillFile(cameraInput.files);
                 cameraInput.value = '';
             }
         });
     }
 
+    if (attachBtn && fileInput) {
+        attachBtn.addEventListener('click', () => fileInput.click());
+    }
+
+    if (cameraBtn && cameraInput) {
+        cameraBtn.addEventListener('click', () => openLiveCameraModal(cameraInput));
+    }
+
+    // New Input Bar "+" Menu Setup
+    const btnPlus = document.getElementById('btnInputPlus');
+    const attachMenu = document.getElementById('attachDropdownMenu');
+    const menuAttachFile = document.getElementById('menuAttachFile');
+    const menuAttachCamera = document.getElementById('menuAttachCamera');
+    const menuAttachMultiple = document.getElementById('menuAttachMultiple');
+
+    if (btnPlus && attachMenu) {
+        btnPlus.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = attachMenu.classList.contains('open');
+            attachMenu.classList.toggle('open', !isOpen);
+            btnPlus.setAttribute('aria-expanded', String(!isOpen));
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!attachMenu.contains(e.target) && e.target !== btnPlus) {
+                attachMenu.classList.remove('open');
+                btnPlus.setAttribute('aria-expanded', 'false');
+            }
+        });
+
+        if (menuAttachFile && fileInput) {
+            menuAttachFile.addEventListener('click', () => {
+                attachMenu.classList.remove('open');
+                btnPlus.setAttribute('aria-expanded', 'false');
+                fileInput.click();
+            });
+        }
+
+        if (menuAttachCamera && cameraInput) {
+            menuAttachCamera.addEventListener('click', () => {
+                attachMenu.classList.remove('open');
+                btnPlus.setAttribute('aria-expanded', 'false');
+                openLiveCameraModal(cameraInput);
+            });
+        }
+
+        if (menuAttachMultiple && fileInput) {
+            menuAttachMultiple.addEventListener('click', () => {
+                attachMenu.classList.remove('open');
+                btnPlus.setAttribute('aria-expanded', 'false');
+                fileInput.click();
+            });
+        }
+    }
+
+    // Web Speech API Voice Input
+    setupVoiceInput(chatInput);
+
     // Drag-and-drop setup
     setupDragAndDrop();
 
     // Load initial chat history from backend
     loadChatHistory();
+}
+
+let recognition = null;
+let isRecordingVoice = false;
+
+function setupVoiceInput(inputEl) {
+    const micBtn = document.getElementById('btnVoiceInput');
+    if (!micBtn) return;
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        micBtn.style.display = 'none';
+        return;
+    }
+
+    try {
+        recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = 'en-IN';
+
+        recognition.onstart = () => {
+            isRecordingVoice = true;
+            micBtn.classList.add('recording');
+            micBtn.setAttribute('aria-pressed', 'true');
+            micBtn.setAttribute('title', 'Listening... Tap to stop');
+        };
+
+        recognition.onresult = (event) => {
+            if (event.results && event.results[0] && event.results[0][0]) {
+                const transcript = event.results[0][0].transcript;
+                if (inputEl) {
+                    inputEl.value = (inputEl.value ? inputEl.value + ' ' : '') + transcript;
+                    inputEl.focus();
+                }
+            }
+        };
+
+        recognition.onerror = (e) => {
+            console.warn('Voice recognition note:', e.error);
+            isRecordingVoice = false;
+            micBtn.classList.remove('recording');
+            micBtn.setAttribute('aria-pressed', 'false');
+            micBtn.setAttribute('title', 'Speak to SpendSense');
+        };
+
+        recognition.onend = () => {
+            isRecordingVoice = false;
+            micBtn.classList.remove('recording');
+            micBtn.setAttribute('aria-pressed', 'false');
+            micBtn.setAttribute('title', 'Speak to SpendSense');
+        };
+
+        micBtn.addEventListener('click', () => {
+            if (isRecordingVoice) {
+                recognition.stop();
+            } else {
+                try {
+                    recognition.start();
+                } catch (err) {
+                    console.warn('Start voice recognition failed:', err);
+                }
+            }
+        });
+    } catch (e) {
+        console.warn('Web Speech setup note:', e);
+        micBtn.style.display = 'none';
+    }
 }
 
 async function openLiveCameraModal(cameraInput) {
@@ -178,20 +302,113 @@ export function appendUserMessage(text) {
     const row = document.createElement('div');
     row.className = 'message-row user';
     row.innerHTML = `
-        <div class="avatar user-avatar">${getIcon('user', { size: 16 })}</div>
+        <div class="avatar user-avatar" aria-hidden="true">${getIcon('user', { size: 16 })}</div>
         <div class="message-bubble">${escapeHtml(text)}</div>
     `;
     messagesContainer.appendChild(row);
     scrollToBottom();
 }
 
+let activeSpeechBtn = null;
+
+function attachMessageActions(wrapper, bubble) {
+    if (!wrapper || !bubble) return;
+
+    const actionsRow = document.createElement('div');
+    actionsRow.className = 'message-actions';
+
+    // Copy Button
+    const copyBtn = document.createElement('button');
+    copyBtn.type = 'button';
+    copyBtn.className = 'msg-action-btn btn-copy';
+    copyBtn.setAttribute('aria-label', 'Copy message');
+    copyBtn.title = 'Copy message';
+    copyBtn.innerHTML = `${getIcon('copy', { size: 12 })} <span>Copy</span>`;
+
+    copyBtn.addEventListener('click', async () => {
+        try {
+            const textToCopy = bubble.innerText || bubble.textContent || '';
+            await navigator.clipboard.writeText(textToCopy.trim());
+            copyBtn.innerHTML = `${getIcon('check', { size: 12 })} <span>Copied!</span>`;
+            copyBtn.classList.add('copied');
+            setTimeout(() => {
+                copyBtn.innerHTML = `${getIcon('copy', { size: 12 })} <span>Copy</span>`;
+                copyBtn.classList.remove('copied');
+            }, 2000);
+        } catch (e) {
+            console.warn('Copy failed:', e);
+        }
+    });
+    actionsRow.appendChild(copyBtn);
+
+    // Listen Button (SpeechSynthesis)
+    if ('speechSynthesis' in window) {
+        const listenBtn = document.createElement('button');
+        listenBtn.type = 'button';
+        listenBtn.className = 'msg-action-btn btn-listen';
+        listenBtn.setAttribute('aria-label', 'Listen to message');
+        listenBtn.title = 'Listen to message';
+        listenBtn.innerHTML = `${getIcon('volume-2', { size: 12 })} <span>Listen</span>`;
+
+        listenBtn.addEventListener('click', () => {
+            if (window.speechSynthesis.speaking && activeSpeechBtn === listenBtn) {
+                window.speechSynthesis.cancel();
+                listenBtn.innerHTML = `${getIcon('volume-2', { size: 12 })} <span>Listen</span>`;
+                listenBtn.classList.remove('speaking');
+                activeSpeechBtn = null;
+                return;
+            }
+
+            window.speechSynthesis.cancel();
+            if (activeSpeechBtn && activeSpeechBtn !== listenBtn) {
+                activeSpeechBtn.innerHTML = `${getIcon('volume-2', { size: 12 })} <span>Listen</span>`;
+                activeSpeechBtn.classList.remove('speaking');
+            }
+
+            const cleanText = (bubble.innerText || bubble.textContent || '')
+                .replace(/[*_#`]/g, '')
+                .replace(/₹/g, 'Rupees ');
+            const utterance = new SpeechSynthesisUtterance(cleanText);
+            utterance.rate = 1.0;
+            utterance.lang = 'en-IN';
+
+            listenBtn.innerHTML = `${getIcon('volume-x', { size: 12 })} <span>Stop</span>`;
+            listenBtn.classList.add('speaking');
+            activeSpeechBtn = listenBtn;
+
+            utterance.onend = () => {
+                listenBtn.innerHTML = `${getIcon('volume-2', { size: 12 })} <span>Listen</span>`;
+                listenBtn.classList.remove('speaking');
+                if (activeSpeechBtn === listenBtn) activeSpeechBtn = null;
+            };
+
+            utterance.onerror = () => {
+                listenBtn.innerHTML = `${getIcon('volume-2', { size: 12 })} <span>Listen</span>`;
+                listenBtn.classList.remove('speaking');
+                if (activeSpeechBtn === listenBtn) activeSpeechBtn = null;
+            };
+
+            window.speechSynthesis.speak(utterance);
+        });
+        actionsRow.appendChild(listenBtn);
+    }
+
+    wrapper.appendChild(actionsRow);
+}
+
 export function appendAssistantMessage(text) {
     const row = document.createElement('div');
     row.className = 'message-row assistant';
     row.innerHTML = `
-        <div class="avatar assistant-avatar">${getIcon('sparkles', { size: 16 })}</div>
-        <div class="message-bubble"><div class="bubble-text">${renderSafeMarkdown(text)}</div></div>
+        <div class="avatar assistant-avatar" aria-hidden="true">${getIcon('indian-rupee', { size: 16 })}</div>
+        <div class="message-bubble-wrapper">
+            <div class="message-bubble"><div class="bubble-text">${renderSafeMarkdown(text)}</div></div>
+        </div>
     `;
+    const wrapper = row.querySelector('.message-bubble-wrapper');
+    const bubble = row.querySelector('.message-bubble');
+    attachMessageActions(wrapper, bubble);
+
     messagesContainer.appendChild(row);
     scrollToBottom();
 }
@@ -200,11 +417,17 @@ export function appendInsightMessage(insightText) {
     const row = document.createElement('div');
     row.className = 'message-row assistant';
     row.innerHTML = `
-        <div class="avatar assistant-avatar insight-avatar">${getIcon('lightbulb', { size: 16 })}</div>
-        <div class="message-bubble" style="border-left: 3px solid var(--color-success); background: var(--color-success-subtle);">
-            <div class="bubble-text"><strong>SpendSense Insight:</strong> ${renderSafeMarkdown(insightText)}</div>
+        <div class="avatar assistant-avatar insight-avatar" aria-hidden="true">${getIcon('lightbulb', { size: 16 })}</div>
+        <div class="message-bubble-wrapper">
+            <div class="message-bubble" style="border-left: 3px solid var(--color-success); background: var(--color-success-subtle);">
+                <div class="bubble-text"><strong>SpendSense Insight:</strong> ${renderSafeMarkdown(insightText)}</div>
+            </div>
         </div>
     `;
+    const wrapper = row.querySelector('.message-bubble-wrapper');
+    const bubble = row.querySelector('.message-bubble');
+    attachMessageActions(wrapper, bubble);
+
     messagesContainer.appendChild(row);
     scrollToBottom();
 }
@@ -213,7 +436,7 @@ export function appendErrorMessage(errorTitle, errorDetails) {
     const row = document.createElement('div');
     row.className = 'message-row assistant';
     row.innerHTML = `
-        <div class="avatar assistant-avatar error-avatar">${getIcon('alert-triangle', { size: 16 })}</div>
+        <div class="avatar assistant-avatar error-avatar" aria-hidden="true">${getIcon('alert-triangle', { size: 16 })}</div>
         <div class="message-bubble" style="background: var(--color-danger-subtle); border-color: var(--color-danger); color: #fca5a5;">
             <div style="font-weight: 700; color: #ffffff; margin-bottom: 0.25rem;">${escapeHtml(errorTitle)}</div>
             <div>${escapeHtml(errorDetails)}</div>
@@ -239,9 +462,9 @@ export function showTypingIndicator(message = 'Reading your bill...', progressPe
     }
 
     row.innerHTML = `
-        <div class="avatar assistant-avatar">${getIcon('sparkles', { size: 16 })}</div>
+        <div class="avatar assistant-avatar" aria-hidden="true">${getIcon('indian-rupee', { size: 16 })}</div>
         <div class="typing-indicator" style="display: flex; flex-direction: column; min-width: 220px;">
-            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;">
+            <div style="flex; align-items: center; justify-content: space-between; gap: 0.75rem; display: flex;">
                 <span>${escapeHtml(message)}</span>
                 <div class="dots-loader">
                     <span></span><span></span><span></span>
@@ -297,10 +520,12 @@ export function appendAssistantMessageWithVis(text, visualization = null) {
     
     const formattedText = renderSafeMarkdown(text);
     row.innerHTML = `
-        <div class="avatar assistant-avatar">${getIcon('sparkles', { size: 16 })}</div>
-        <div class="message-bubble" style="max-width: 580px; width: 100%;">
-            <div class="bubble-text" style="line-height: 1.6;">${formattedText}</div>
-            <div class="vis-container" style="margin-top: 0.75rem;"></div>
+        <div class="avatar assistant-avatar" aria-hidden="true">${getIcon('indian-rupee', { size: 16 })}</div>
+        <div class="message-bubble-wrapper" style="max-width: 600px; width: 100%;">
+            <div class="message-bubble">
+                <div class="bubble-text" style="line-height: 1.6;">${formattedText}</div>
+                <div class="vis-container" style="margin-top: 0.75rem;"></div>
+            </div>
         </div>
     `;
 
@@ -310,6 +535,10 @@ export function appendAssistantMessageWithVis(text, visualization = null) {
     } else if (visContainer) {
         visContainer.remove();
     }
+
+    const wrapper = row.querySelector('.message-bubble-wrapper');
+    const bubble = row.querySelector('.message-bubble');
+    attachMessageActions(wrapper, bubble);
 
     messagesContainer.appendChild(row);
     scrollToBottom();
@@ -499,8 +728,8 @@ export async function uploadBillFile(fileInput) {
         appendInsightMessage(`Tip: ${prep.tipMessage}`);
     }
 
-    // Show Gemini reading indicator with progress
-    showTypingIndicator('Reading your bill with Gemini AI...', 75);
+    // Show reading indicator with progress
+    showTypingIndicator('Reading your bill and extracting items...', 75);
 
     const formData = new FormData();
     prep.files.forEach((f, idx) => {
@@ -522,7 +751,7 @@ export async function uploadBillFile(fileInput) {
             // Render structured bill summary card in chat
             const cardRow = document.createElement('div');
             cardRow.className = 'message-row assistant';
-            cardRow.innerHTML = `<div class="avatar assistant-avatar">${getIcon('sparkles', { size: 16 })}</div>`;
+            cardRow.innerHTML = `<div class="avatar assistant-avatar" aria-hidden="true">${getIcon('indian-rupee', { size: 16 })}</div>`;
             renderBillCard(response.draft, cardRow);
             messagesContainer.appendChild(cardRow);
             scrollToBottom();
@@ -556,7 +785,7 @@ export async function uploadBillFile(fileInput) {
 }
 
 function setupDragAndDrop() {
-    const chatContainer = document.querySelector('.chat-container');
+    const chatContainer = document.querySelector('.chat-column') || document.querySelector('.chat-container');
     const dropOverlay = document.getElementById('dropOverlay');
     if (!chatContainer || !dropOverlay) return;
 

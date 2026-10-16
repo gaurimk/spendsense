@@ -18,6 +18,10 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Brand Guidelines Google Fonts: Space Grotesk, Instrument Serif, Space Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
     <!-- Immediate Global Error Handler -->
     <script>
@@ -61,8 +65,12 @@
                     </svg>
                 </div>
                 <div class="brand-title">SpendSense</div>
-                <span class="brand-badge">AI Assistant</span>
+                <div class="mode-pill" id="modePill" title="Account Mode">
+                    <span class="mode-pill-dot" aria-hidden="true"></span>
+                    <span id="modePillText">Personal</span>
+                </div>
             </div>
+
             <div class="header-actions">
                 <!-- Daily Upload Counter Pill -->
                 <div class="upload-limit-pill" id="uploadPill" style="display: none;">
@@ -71,6 +79,13 @@
                     </span>
                     <span><strong id="uploadPillCount">0</strong> / <span id="uploadPillLimit">20</span> uploads today</span>
                 </div>
+
+                <!-- Share Button -->
+                <button class="header-icon-btn" id="shareBtn" type="button" aria-label="Share SpendSense" title="Share SpendSense">
+                    <span aria-hidden="true" style="display: flex;">
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>
+                    </span>
+                </button>
 
                 <!-- Theme Toggle Button -->
                 <button class="theme-toggle-btn" id="themeToggleBtn" type="button" aria-label="Toggle light or dark theme" title="Toggle theme">
@@ -109,113 +124,167 @@
             </div>
         </header>
 
-        <!-- Secondary Navigation Tabs (Desktop) -->
-        <nav class="nav-tabs" aria-label="Main Navigation">
-            <button class="tab-btn active" data-screen="screenChat" type="button">
-                <span class="tab-icon" aria-hidden="true">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                </span>
-                <span>Chat</span>
-            </button>
-            <button class="tab-btn" data-screen="screenInsights" type="button">
-                <span class="tab-icon" aria-hidden="true">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
-                </span>
-                <span>Insights</span>
-            </button>
-            <button class="tab-btn" data-screen="screenBills" type="button">
-                <span class="tab-icon" aria-hidden="true">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M13 16H8"/></svg>
-                </span>
-                <span>Bills</span>
-            </button>
-            <button class="tab-btn" data-screen="screenBudgets" type="button">
-                <span class="tab-icon" aria-hidden="true">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
-                </span>
-                <span>Budgets</span>
-            </button>
-            <button class="tab-btn" data-screen="screenPriceTracker" type="button">
-                <span class="tab-icon" aria-hidden="true">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg>
-                </span>
-                <span>Price Tracker</span>
-            </button>
-            <button class="tab-btn" data-screen="screenReminders" type="button">
-                <span class="tab-icon" aria-hidden="true">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
-                </span>
-                <span>Reminders</span>
-            </button>
-            <button class="tab-btn" data-screen="screenSettings" type="button">
-                <span class="tab-icon" aria-hidden="true">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                </span>
-                <span>Settings</span>
-            </button>
-        </nav>
-
-        <!-- App Screens Container -->
-        <main class="app-content">
-            <!-- 1. CHAT SCREEN (Core Experience) -->
-            <section class="screen-view active" id="screenChat">
-                <div class="chat-container">
-                    <!-- Drag and Drop Overlay -->
-                    <div class="drop-overlay" id="dropOverlay">
-                        <div class="drop-icon" aria-hidden="true">
-                            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                        </div>
-                        <div class="drop-text">Drop your bill or receipt here</div>
-                        <p style="color: var(--color-text-muted); font-size: 0.9rem;">Supports JPG, PNG, WebP, and PDF</p>
+        <!-- Main Workspace: Slim Icon Rail + Central Main Canvas + Hub Slide-Out -->
+        <div class="app-workspace" id="appWorkspace">
+            <!-- Slim Left Icon Rail (Desktop) -->
+            <nav class="app-icon-rail" id="appIconRail" aria-label="Main Navigation">
+                <div class="rail-brand-slot" aria-hidden="true">
+                    <div class="rail-logo">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M6 3h12M6 8h12M6 13l8 8M6 13h3a4 4 0 0 0 0-8H6"/>
+                        </svg>
                     </div>
+                </div>
 
-                    <!-- Messages Stream -->
-                    <div class="chat-messages" id="chatMessages">
-                        <!-- Welcome Message Card -->
-                        <div class="welcome-card" id="welcomeCard">
-                            <h2 class="welcome-title">Welcome to SpendSense</h2>
-                            <p class="welcome-subtitle">
-                                Your smart expense assistant. Upload a supermarket receipt, restaurant bill, pharmacy slip, or fuel invoice, or tap a suggestion below to explore.
-                            </p>
-                            <div class="suggestion-chips">
-                                <button class="chip-btn" type="button">Where did I spend the most this month?</button>
-                                <button class="chip-btn" type="button">How much did I spend on snacks?</button>
-                                <button class="chip-btn" type="button">Which store is cheaper for milk?</button>
-                                <button class="chip-btn" type="button">Compare this month with last month</button>
-                                <button class="chip-btn" type="button">Show my 5 biggest bills</button>
-                                <button class="chip-btn" id="btnLoadDemoChip" type="button" style="border-color: var(--color-primary); color: var(--color-primary);">
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right: 4px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                                    Load 40 Demo Bills
+                <div class="rail-items">
+                    <button class="rail-btn active" data-screen="screenChat" id="railBtnChat" type="button" aria-label="Chat" title="Chat">
+                        <span aria-hidden="true" style="display: flex;">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                        </span>
+                        <span class="rail-tooltip">Chat</span>
+                    </button>
+
+                    <button class="rail-btn" id="railBtnHub" type="button" aria-label="Project Hub" title="Project Hub">
+                        <span aria-hidden="true" style="display: flex;">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+                        </span>
+                        <span class="rail-tooltip">Hub</span>
+                    </button>
+
+                    <button class="rail-btn" data-screen="screenBills" id="railBtnBills" type="button" aria-label="Bills" title="Bills">
+                        <span aria-hidden="true" style="display: flex;">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M13 16H8"/></svg>
+                        </span>
+                        <span class="rail-tooltip">Bills</span>
+                    </button>
+
+                    <button class="rail-btn" data-screen="screenInsights" id="railBtnInsights" type="button" aria-label="Insights" title="Insights">
+                        <span aria-hidden="true" style="display: flex;">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+                        </span>
+                        <span class="rail-tooltip">Insights</span>
+                    </button>
+
+                    <button class="rail-btn" data-screen="screenSettings" id="railBtnSettings" type="button" aria-label="Settings" title="Settings">
+                        <span aria-hidden="true" style="display: flex;">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                        </span>
+                        <span class="rail-tooltip">Settings</span>
+                    </button>
+                </div>
+
+                <div class="rail-bottom">
+                    <button class="rail-avatar-btn" id="railAvatarBtn" type="button" aria-label="User Account" title="Account">
+                        <span class="rail-avatar-initials" id="railAvatarInitials">U</span>
+                    </button>
+                </div>
+            </nav>
+
+            <!-- Center Content Workspace -->
+            <main class="app-content" id="appContent">
+                <!-- 1. CHAT SCREEN (Core Experience) -->
+                <section class="screen-view active" id="screenChat">
+                    <div class="chat-column">
+                        <!-- Module Header -->
+                        <div class="chat-module-header">
+                            <div class="module-header-left">
+                                <span class="module-header-icon" aria-hidden="true">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M6 3h12M6 8h12M6 13l8 8M6 13h3a4 4 0 0 0 0-8H6"/>
+                                    </svg>
+                                </span>
+                                <div>
+                                    <h1 class="module-title">SpendSense Assistant</h1>
+                                    <p class="module-desc">Kirana, store receipts and personal expense intelligence</p>
+                                </div>
+                            </div>
+                            <span class="module-status-chip">
+                                <span class="status-chip-dot"></span> Connected
+                            </span>
+                        </div>
+
+                        <!-- Drag and Drop Overlay -->
+                        <div class="drop-overlay" id="dropOverlay">
+                            <div class="drop-icon" aria-hidden="true">
+                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                            </div>
+                            <div class="drop-text">Drop your bill or receipt here</div>
+                            <p style="color: var(--color-text-muted); font-size: 0.9rem;">Supports JPG, PNG, WebP, and PDF</p>
+                        </div>
+
+                        <!-- Messages Stream -->
+                        <div class="chat-messages" id="chatMessages">
+                            <!-- Welcome Message Card -->
+                            <div class="welcome-card" id="welcomeCard">
+                                <span class="web-label" style="font-size: 0.72rem; color: var(--color-label); margin-bottom: 0.25rem; display: block;">01 — SPEND ASSISTANT</span>
+                                <h2 class="welcome-title">Welcome to SpendSense</h2>
+                                <div class="welcome-prompt-serif">What needs to get tracked?</div>
+                                <p class="welcome-subtitle">
+                                    Your personal expense assistant. Upload a supermarket receipt, restaurant bill, pharmacy slip, or fuel invoice, or tap a suggestion below to explore.
+                                </p>
+                                <div class="suggestion-chips">
+                                    <button class="chip-btn" type="button">Where did I spend the most this month?</button>
+                                    <button class="chip-btn" type="button">How much did I spend on snacks?</button>
+                                    <button class="chip-btn" type="button">Which store is cheaper for milk?</button>
+                                    <button class="chip-btn" type="button">Compare this month with last month</button>
+                                    <button class="chip-btn" type="button">Show my 5 biggest bills</button>
+                                    <button class="chip-btn" id="btnLoadDemoChip" type="button" style="border-color: var(--color-primary); color: var(--color-primary);">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right: 4px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                                        Load 40 Demo Bills
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Chat Input Wrapper & Bar -->
+                        <div class="chat-input-wrapper">
+                            <!-- Hidden File Inputs -->
+                            <input type="file" id="fileUploadInput" accept="image/jpeg,image/png,image/webp,application/pdf" multiple style="display: none;">
+                            <input type="file" id="cameraUploadInput" accept="image/*" capture="environment" multiple style="display: none;">
+
+                            <div class="chat-input-pill">
+                                <!-- Attach Dropdown Button (+) -->
+                                <div class="input-attach-wrap" id="inputAttachWrap">
+                                    <button class="pill-btn-plus" id="btnInputPlus" type="button" aria-label="Add attachment or take photo" title="Add attachment or take photo">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    </button>
+                                    <div class="attach-dropdown-menu" id="attachDropdownMenu" role="menu">
+                                        <button class="attach-menu-item" id="menuAttachFile" type="button" role="menuitem">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                                            <span>Upload Receipt (Image or PDF)</span>
+                                        </button>
+                                        <button class="attach-menu-item" id="menuAttachCamera" type="button" role="menuitem">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+                                            <span>Take Photo with Camera</span>
+                                        </button>
+                                        <button class="attach-menu-item" id="menuAttachMultiple" type="button" role="menuitem">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+                                            <span>Multiple Photos (Long Bill)</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Text Input Field -->
+                                <input type="text" class="chat-input-field" id="chatInputField" placeholder="Ask SpendSense anything..." autocomplete="off">
+
+                                <!-- Voice Microphone Button -->
+                                <button class="pill-btn-mic" id="btnVoiceInput" type="button" aria-label="Voice input" title="Speak to SpendSense">
+                                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
                                 </button>
+
+                                <!-- Send Button -->
+                                <button class="pill-btn-send" id="btnSendMessage" type="button" aria-label="Send message" title="Send message">
+                                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                                </button>
+                            </div>
+
+                            <!-- Footer Disclaimer Line -->
+                            <div class="chat-footer-disclaimer">
+                                SpendSense can make mistakes. Please verify important info. It does not give financial or tax advice.
                             </div>
                         </div>
                     </div>
-
-                    <!-- Chat Input Bar -->
-                    <div class="chat-input-bar">
-                        <!-- Hidden File Inputs (Supports up to 3 photos for long bills) -->
-                        <input type="file" id="fileUploadInput" accept="image/jpeg,image/png,image/webp,application/pdf" multiple style="display: none;">
-                        <input type="file" id="cameraUploadInput" accept="image/*" capture="environment" multiple style="display: none;">
-
-                        <!-- Attach Button -->
-                        <button class="icon-btn" id="btnAttachFile" type="button" aria-label="Attach receipt file" title="Attach bill (image or PDF)">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-                        </button>
-                        <!-- Camera Capture Button -->
-                        <button class="icon-btn" id="btnCameraCapture" type="button" aria-label="Capture bill with camera" title="Capture bill with camera">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
-                        </button>
-
-                        <!-- Text Input -->
-                        <input type="text" class="chat-input-field" id="chatInputField" placeholder="Ask a question or upload a receipt..." autocomplete="off">
-
-                        <!-- Send Button -->
-                        <button class="btn-send" id="btnSendMessage" type="button" aria-label="Send message" title="Send message">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                        </button>
-                    </div>
-                </div>
-            </section>
+                </section>
 
             <!-- 2. INSIGHTS SCREEN -->
             <section class="screen-view" id="screenInsights" style="overflow-y: auto;">
@@ -266,79 +335,163 @@
             </section>
         </main>
 
-        <!-- Fixed Bottom Navigation Bar (Mobile only: Chat, Insights, Bills, Budgets, More) -->
-        <nav class="mobile-nav-bar" id="mobileNavBar" aria-label="Mobile Navigation">
-            <button class="mobile-nav-item active" data-screen="screenChat" type="button">
-                <span aria-hidden="true" style="display: flex;">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                </span>
-                <span>Chat</span>
-            </button>
-            <button class="mobile-nav-item" data-screen="screenInsights" type="button">
-                <span aria-hidden="true" style="display: flex;">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
-                </span>
-                <span>Insights</span>
-            </button>
-            <button class="mobile-nav-item" data-screen="screenBills" type="button">
-                <span aria-hidden="true" style="display: flex;">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M13 16H8"/></svg>
-                </span>
-                <span>Bills</span>
-            </button>
-            <button class="mobile-nav-item" data-screen="screenBudgets" type="button">
-                <span aria-hidden="true" style="display: flex;">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
-                </span>
-                <span>Budgets</span>
-            </button>
-            <button class="mobile-nav-item" id="mobileMoreBtn" type="button" aria-label="More navigation tabs">
-                <span aria-hidden="true" style="display: flex;">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
-                </span>
-                <span>More</span>
-            </button>
-        </nav>
+        <!-- Right Side Hub Panel -->
+        <aside class="hub-panel" id="hubPanel" aria-label="SpendSense Hub" aria-hidden="true">
+            <div class="hub-panel-header">
+                <div class="hub-panel-title">
+                    <span class="hub-header-icon" aria-hidden="true">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+                    </span>
+                    <div>
+                        <h3 class="hub-title-text">SpendSense Hub</h3>
+                        <span class="hub-subtitle-text">Financial overview & tools</span>
+                    </div>
+                </div>
+                <div class="hub-panel-controls">
+                    <button class="hub-ctrl-btn" id="btnHubExpand" type="button" aria-label="Expand hub panel" title="Expand panel">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/></svg>
+                        <span>Expand</span>
+                    </button>
+                    <button class="hub-ctrl-btn" id="btnHubMinimize" type="button" aria-label="Minimize hub panel" title="Minimize panel">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        <span>Minimize</span>
+                    </button>
+                </div>
+            </div>
+            <div class="hub-panel-body" id="hubPanelBody">
+                <div class="hub-placeholder">
+                    <div class="hub-placeholder-header-card">
+                        <div class="hub-badge-row">
+                            <span class="hub-chip-live">Connected</span>
+                            <span class="hub-category-tag">Spend Intelligence</span>
+                        </div>
+                        <h4 style="margin: 0.35rem 0 0.2rem; font-size: 1.1rem; color: var(--color-text);">SpendSense Project Hub</h4>
+                        <p style="font-size: 0.82rem; color: var(--color-text-muted); margin: 0; line-height: 1.5;">Access all your spending insights, bills, budgets, price comparisons, and reminder tools without leaving the chat.</p>
+                    </div>
 
-        <!-- Mobile "More" Drawer Bottom Sheet -->
-        <div class="mobile-more-sheet-backdrop" id="mobileMoreSheet">
-            <div class="mobile-more-sheet">
-                <div class="sheet-handle"></div>
-                <div style="font-size: 0.75rem; font-weight: 700; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem;">More Tools</div>
-                <button class="sheet-item-btn" data-screen="screenPriceTracker" type="button">
-                    <span aria-hidden="true" style="display: flex; color: var(--color-primary);">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg>
-                    </span>
-                    <span>Price Tracker</span>
-                </button>
-                <button class="sheet-item-btn" data-screen="screenReminders" type="button">
-                    <span aria-hidden="true" style="display: flex; color: var(--color-warning);">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
-                    </span>
-                    <span>Reminders & Warranties</span>
-                </button>
-                <button class="sheet-item-btn" data-screen="screenSettings" type="button">
-                    <span aria-hidden="true" style="display: flex; color: var(--color-info);">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                    </span>
-                    <span>Settings & Data Controls</span>
-                </button>
-            </div>
-        </div>
+                    <div style="font-size: 0.78rem; font-weight: 700; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 1rem 0 0.5rem;">Explore Modules</div>
 
-        <!-- Footer -->
-        <footer class="app-footer">
-            <div>
-                <strong>SpendSense</strong> &bull; Expense Intelligence Platform. Not financial advice.
+                    <div class="hub-quick-tiles">
+                        <button type="button" class="hub-quick-tile" onclick="window.switchTab('screenBills'); window.toggleHub(false);">
+                            <span class="tile-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M13 16H8"/></svg>
+                            </span>
+                            <div class="tile-content">
+                                <div class="tile-title">Bills & Receipts</div>
+                                <div class="tile-desc">Manage, search, and review all parsed bills</div>
+                            </div>
+                            <span class="tile-chevron">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                            </span>
+                        </button>
+                        <button type="button" class="hub-quick-tile" onclick="window.switchTab('screenInsights'); window.toggleHub(false);">
+                            <span class="tile-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+                            </span>
+                            <div class="tile-content">
+                                <div class="tile-title">Insights & Trends</div>
+                                <div class="tile-desc">Monthly breakdown, top merchants, and KPIs</div>
+                            </div>
+                            <span class="tile-chevron">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                            </span>
+                        </button>
+                        <button type="button" class="hub-quick-tile" onclick="window.switchTab('screenBudgets'); window.toggleHub(false);">
+                            <span class="tile-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+                            </span>
+                            <div class="tile-content">
+                                <div class="tile-title">Category Budgets</div>
+                                <div class="tile-desc">Spending targets and 80% threshold warnings</div>
+                            </div>
+                            <span class="tile-chevron">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                            </span>
+                        </button>
+                        <button type="button" class="hub-quick-tile" onclick="window.switchTab('screenPriceTracker'); window.toggleHub(false);">
+                            <span class="tile-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg>
+                            </span>
+                            <div class="tile-content">
+                                <div class="tile-title">Price Tracker</div>
+                                <div class="tile-desc">Compare grocery prices across local kiranas</div>
+                            </div>
+                            <span class="tile-chevron">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                            </span>
+                        </button>
+                        <button type="button" class="hub-quick-tile" onclick="window.switchTab('screenReminders'); window.toggleHub(false);">
+                            <span class="tile-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                            </span>
+                            <div class="tile-content">
+                                <div class="tile-title">Reminders & Warranties</div>
+                                <div class="tile-desc">Warranty deadlines and bill payments</div>
+                            </div>
+                            <span class="tile-chevron">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                            </span>
+                        </button>
+                        <button type="button" class="hub-quick-tile" onclick="window.switchTab('screenSettings'); window.toggleHub(false);">
+                            <span class="tile-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                            </span>
+                            <div class="tile-content">
+                                <div class="tile-title">Settings & Data Controls</div>
+                                <div class="tile-desc">Categories, CSV export, and demo datasets</div>
+                            </div>
+                            <span class="tile-chevron">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                            </span>
+                        </button>
+                    </div>
+                </div>
             </div>
-            <div class="privacy-note" style="display: flex; align-items: center; gap: 0.35rem;">
-                <span aria-hidden="true" style="display: flex;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                </span>
-                <span>Card and phone numbers are never stored or logged.</span>
-            </div>
-        </footer>
+        </aside>
+
+        <!-- Right-edge Tab Button -->
+        <button class="edge-hub-tab" id="edgeHubTab" type="button" aria-label="Open Project Hub" title="Open Hub">
+            <span class="edge-hub-chevron" aria-hidden="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+            </span>
+            <span class="edge-hub-label">Hub</span>
+        </button>
     </div>
+
+    <!-- Mobile Navigation Bar (Bottom) -->
+    <nav class="mobile-nav-bar" id="mobileNavBar" aria-label="Mobile Navigation">
+        <button class="mobile-nav-item active" data-screen="screenChat" id="mobileNavChat" type="button">
+            <span aria-hidden="true" style="display: flex;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </span>
+            <span>Chat</span>
+        </button>
+        <button class="mobile-nav-item" id="mobileNavHub" type="button" aria-label="Open Hub">
+            <span aria-hidden="true" style="display: flex;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+            </span>
+            <span>Hub</span>
+        </button>
+        <button class="mobile-nav-item" data-screen="screenBills" id="mobileNavBills" type="button">
+            <span aria-hidden="true" style="display: flex;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M13 16H8"/></svg>
+            </span>
+            <span>Bills</span>
+        </button>
+        <button class="mobile-nav-item" data-screen="screenInsights" id="mobileNavInsights" type="button">
+            <span aria-hidden="true" style="display: flex;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+            </span>
+            <span>Insights</span>
+        </button>
+        <button class="mobile-nav-item" data-screen="screenSettings" id="mobileNavSettings" type="button">
+            <span aria-hidden="true" style="display: flex;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </span>
+            <span>Settings</span>
+        </button>
+    </nav>
+</div>
 
     <!-- ─────────────────────────────────────────────────────────────
          Toast Notifications Container
