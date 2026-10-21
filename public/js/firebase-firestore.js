@@ -32,23 +32,51 @@ import { db } from "./firebase-config.js";
 export async function saveBillToFirestore(userId, billData) {
     if (!userId) throw new Error('User ID required to save bill to Firestore');
     const billsCol = collection(db, 'users', userId, 'bills');
-    const docRef = await addDoc(billsCol, {
-        merchant_name: billData.merchant_name || null,
-        bill_date: billData.bill_date || new Date().toISOString().split('T')[0],
+
+    // Clean line_items so there are no undefined values or unsupported types
+    const rawItems = Array.isArray(billData.line_items) ? billData.line_items : [];
+    const cleanedLineItems = rawItems.map(it => ({
+        name: String(it.name || 'Item').trim(),
+        quantity: Number(it.quantity || 1),
+        unit: String(it.unit || 'pcs'),
+        unit_price: Number(it.unit_price || 0),
+        tax_percent: Number(it.tax_percent || 0),
+        line_total: Number(it.line_total || 0),
+        category: String(it.category || 'General & Miscellaneous'),
+        split_type: String(it.split_type || 'mine'),
+        my_share_amount: Number(it.my_share_amount || it.line_total || 0)
+    }));
+
+    const docData = {
+        merchant_name: billData.merchant_name ? String(billData.merchant_name).trim() : 'Unrecognized Merchant',
+        bill_date: billData.bill_date ? String(billData.bill_date) : new Date().toISOString().split('T')[0],
         grand_total: Number(billData.grand_total || 0),
         my_share_total: Number(billData.my_share_total || billData.grand_total || 0),
         split_ratio: Number(billData.split_ratio || 1.0),
-        category_id: billData.category_id ? String(billData.category_id) : null,
-        category_name: billData.category_name || 'General & Miscellaneous',
-        payment_method: billData.payment_method || null,
-        document_type: billData.document_type || 'printed',
-        legibility: billData.legibility || 'clear',
-        line_items: Array.isArray(billData.line_items) ? billData.line_items : [],
-        file_name: billData.file_name || null,
-        storage_url: billData.storage_url || null,
-        storage_path: billData.storage_path || null,
+        category_name: billData.category_name || (cleanedLineItems[0]?.category) || 'General & Miscellaneous',
+        payment_method: billData.payment_method ? String(billData.payment_method) : 'Cash',
+        document_type: String(billData.document_type || 'printed'),
+        legibility: String(billData.legibility || 'clear'),
+        line_items: cleanedLineItems,
+        file_name: billData.file_name ? String(billData.file_name) : null,
         created_at: serverTimestamp()
-    });
+    };
+
+    if (billData.bill_number) {
+        docData.bill_number = String(billData.bill_number).trim();
+    }
+    if (billData.category_id) {
+        docData.category_id = String(billData.category_id);
+    }
+    // Only set storage properties if valid non-empty strings
+    if (billData.storage_url && typeof billData.storage_url === 'string' && billData.storage_url.trim() !== '') {
+        docData.storage_url = billData.storage_url.trim();
+    }
+    if (billData.storage_path && typeof billData.storage_path === 'string' && billData.storage_path.trim() !== '') {
+        docData.storage_path = billData.storage_path.trim();
+    }
+
+    const docRef = await addDoc(billsCol, docData);
     return docRef.id;
 }
 

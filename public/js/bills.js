@@ -340,9 +340,20 @@ async function fetchAndRenderBills() {
         let bills = [];
         const fbUser = getCurrentFirebaseUser();
         if (fbUser && fbUser.uid) {
-            const allFbBills = await getBillsFromFirestore(fbUser.uid);
-            firestoreBillsCache = allFbBills;
-            bills = allFbBills.filter(b => {
+            let allFbBills = await getBillsFromFirestore(fbUser.uid);
+            // Fallback to backend API if Firestore is empty or still syncing
+            if (!allFbBills || allFbBills.length === 0) {
+                try {
+                    const data = await apiRequest('/api/bills?' + queryParams.toString());
+                    if (data && data.bills && data.bills.length > 0) {
+                        allFbBills = data.bills;
+                    }
+                } catch (fbFallbackErr) {
+                    console.warn('Bills backend fallback note:', fbFallbackErr);
+                }
+            }
+            firestoreBillsCache = allFbBills || [];
+            bills = (allFbBills || []).filter(b => {
                 if (currentFilter.search) {
                     const s = currentFilter.search.toLowerCase();
                     const m = (b.merchant_name || '').toLowerCase();

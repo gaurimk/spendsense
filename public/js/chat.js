@@ -714,23 +714,7 @@ export async function uploadBillFile(fileInput) {
         hideTypingIndicator();
 
         if (response.success && response.draft) {
-            // Upload receipt file to Firebase Cloud Storage if user is signed in
-            try {
-                const firebaseUser = getCurrentFirebaseUser();
-                if (firebaseUser && firebaseUser.uid && prep.files && prep.files[0]) {
-                    const storageRes = await uploadReceiptToStorage(
-                        firebaseUser.uid,
-                        prep.files[0].blob,
-                        prep.files[0].name
-                    );
-                    response.draft.storage_url = storageRes.downloadUrl;
-                    response.draft.storage_path = storageRes.storagePath;
-                }
-            } catch (storageErr) {
-                console.warn('Firebase Cloud Storage upload note:', storageErr.message);
-            }
-
-            // Render structured bill summary card in chat
+            // Render structured bill summary card in chat IMMEDIATELY
             const cardRow = document.createElement('div');
             cardRow.className = 'message-row assistant';
             cardRow.innerHTML = `<div class="avatar assistant-avatar" aria-hidden="true">${getIcon('indian-rupee', { size: 16 })}</div>`;
@@ -738,10 +722,28 @@ export async function uploadBillFile(fileInput) {
             messagesContainer.appendChild(cardRow);
             scrollToBottom();
 
+            // Asynchronously upload receipt file to Firebase Cloud Storage in background (non-blocking)
+            const firebaseUser = getCurrentFirebaseUser();
+            if (firebaseUser && firebaseUser.uid && prep.files && prep.files[0]) {
+                uploadReceiptToStorage(
+                    firebaseUser.uid,
+                    prep.files[0].blob,
+                    prep.files[0].name
+                ).then(storageRes => {
+                    if (storageRes && storageRes.downloadUrl) {
+                        response.draft.storage_url = storageRes.downloadUrl;
+                        response.draft.storage_path = storageRes.storagePath;
+                    }
+                }).catch(storageErr => {
+                    console.warn('Firebase Cloud Storage optional upload note:', storageErr.message);
+                });
+            }
+
             // Update remaining uploads if provided
             if (response.remaining_uploads !== undefined) {
-                const limitRes = await apiRequest('/api/user/upload-limit');
-                setUploadLimit(limitRes);
+                apiRequest('/api/user/upload-limit').then(limitRes => {
+                    setUploadLimit(limitRes);
+                }).catch(e => console.warn('Upload limit sync note:', e));
             }
         }
     } catch (err) {

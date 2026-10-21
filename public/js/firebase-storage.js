@@ -43,17 +43,22 @@ export async function uploadReceiptToStorage(userId, fileBlob, originalName = 'b
         }
     };
 
-    // Upload bytes to Cloud Storage
-    const snapshot = await uploadBytes(storageRef, fileBlob, metadata);
+    // Use a fast 3.5s timeout to avoid SDK hanging on unprovisioned/Spark storage buckets
+    const uploadTask = (async () => {
+        const snapshot = await uploadBytes(storageRef, fileBlob, metadata);
+        const downloadUrl = await getDownloadURL(snapshot.ref);
+        return {
+            downloadUrl,
+            storagePath,
+            fileName: `${timestamp}_${cleanName}`
+        };
+    })();
 
-    // Get public/authenticated download URL
-    const downloadUrl = await getDownloadURL(snapshot.ref);
+    const timeoutTask = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Firebase Storage timeout (bucket unprovisioned or offline)')), 3500);
+    });
 
-    return {
-        downloadUrl,
-        storagePath,
-        fileName: `${timestamp}_${cleanName}`
-    };
+    return await Promise.race([uploadTask, timeoutTask]);
 }
 
 /**

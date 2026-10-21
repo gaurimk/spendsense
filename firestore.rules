@@ -87,9 +87,11 @@ service cloud.firestore {
       return (!('grand_total' in data) || (data.grand_total is number && data.grand_total >= 0)) &&
              (!('my_share_total' in data) || (data.my_share_total is number && data.my_share_total >= 0)) &&
              (!('merchant_name' in data) || data.merchant_name == null || (data.merchant_name is string && data.merchant_name.size() <= 200)) &&
-             (!('category_name' in data) || (data.category_name is string && data.category_name.size() <= 100)) &&
-             (!('storage_url' in data) || (data.storage_url is string && data.storage_url.size() <= 1000)) &&
-             (!('storage_path' in data) || (data.storage_path is string && data.storage_path.size() <= 500)) &&
+             (!('category_name' in data) || data.category_name == null || (data.category_name is string && data.category_name.size() <= 100)) &&
+             (!('storage_url' in data) || data.storage_url == null || (data.storage_url is string && data.storage_url.size() <= 1000)) &&
+             (!('storage_path' in data) || data.storage_path == null || (data.storage_path is string && data.storage_path.size() <= 500)) &&
+             (!('file_name' in data) || data.file_name == null || (data.file_name is string && data.file_name.size() <= 300)) &&
+             (!('bill_number' in data) || data.bill_number == null || (data.bill_number is string && data.bill_number.size() <= 100)) &&
              (!('line_items' in data) || (data.line_items is list && data.line_items.size() <= 100));
     }
 
