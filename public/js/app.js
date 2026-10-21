@@ -2,7 +2,7 @@
  * SpendSense - Main Application Controller (ES Module)
  */
 
-import { checkAuthState, register, login, closeAuthModal, getCurrentUser, logout } from './auth.js';
+import { checkAuthState, register, login, googleSignIn, closeAuthModal, getCurrentUser, logout } from './auth.js';
 import { initChat, loadChatHistory, appendAssistantMessage } from './chat.js';
 import { loadCategories } from './bill-modal.js';
 import { loadInsightsDashboard } from './insights.js';
@@ -216,6 +216,14 @@ function initAppMode() {
         // Update Suggestion Chips
         renderModeSuggestionChips(currentMode);
 
+        // Update Chat Input Placeholder
+        const chatInputField = document.getElementById('chatInputField');
+        if (chatInputField) {
+            chatInputField.placeholder = currentMode === 'business'
+                ? 'Ask about supplier invoices, GST tax, pending payables, or distributor rates...'
+                : 'Ask a spending question, compare store prices, or review bills...';
+        }
+
         // Update Hub Header & Tiles
         renderModeHubTiles(currentMode);
 
@@ -263,6 +271,22 @@ function initAppMode() {
                 showToast('Switched to Business / Shop Mode (Invoices, Suppliers & GST)', 'info', 2500);
             }
             if (modeDropdown) modeDropdown.classList.remove('open');
+        });
+    }
+
+    const btnDropdownConfig = document.getElementById('btnDropdownConfigureBusiness');
+    if (btnDropdownConfig) {
+        btnDropdownConfig.addEventListener('click', () => {
+            if (modeDropdown) modeDropdown.classList.remove('open');
+            window.switchTab('screenSettings');
+            setTimeout(() => {
+                const cfgCard = document.getElementById('businessProfileSettingsCard');
+                if (cfgCard) {
+                    cfgCard.scrollIntoView({ behavior: 'smooth' });
+                    cfgCard.classList.add('active-mode');
+                    setTimeout(() => cfgCard.classList.remove('active-mode'), 2500);
+                }
+            }, 150);
         });
     }
 
@@ -965,6 +989,37 @@ function setupAuthListeners() {
     const closeAuthBtn = document.getElementById('closeAuthModalBtn');
     if (closeAuthBtn) {
         closeAuthBtn.addEventListener('click', closeAuthModal);
+    }
+
+    // Google Sign-In Listener
+    const googleBtn = document.getElementById('googleSignInBtn');
+    const googleBtnText = document.getElementById('googleBtnText');
+    if (googleBtn) {
+        googleBtn.addEventListener('click', async () => {
+            if (authError) authError.style.display = 'none';
+            googleBtn.disabled = true;
+            if (googleBtnText) googleBtnText.textContent = 'Connecting with Google...';
+
+            try {
+                await googleSignIn();
+                showToast('Signed in with Google successfully!', 'success');
+                await loadCategories();
+                await loadChatHistory();
+                closeAuthModal();
+                if (window.switchTab) {
+                    window.switchTab('screenChat');
+                }
+            } catch (err) {
+                console.error('Google sign-in error:', err);
+                if (authError) {
+                    authError.textContent = err.message || 'Google sign-in failed. Please try again.';
+                    authError.style.display = 'block';
+                }
+            } finally {
+                googleBtn.disabled = false;
+                if (googleBtnText) googleBtnText.textContent = 'Continue with Google';
+            }
+        });
     }
 }
 

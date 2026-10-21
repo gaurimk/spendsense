@@ -106,7 +106,9 @@ export function openEditModal(draftData, onSaveCallback) {
 
     // Gather images (check all_files, preview_urls, file_path, file_name)
     const images = [];
-    if (Array.isArray(draftData.preview_urls) && draftData.preview_urls.length > 0) {
+    if (draftData.storage_url) {
+        images.push(draftData.storage_url);
+    } else if (Array.isArray(draftData.preview_urls) && draftData.preview_urls.length > 0) {
         draftData.preview_urls.forEach(u => images.push(u));
     } else if (Array.isArray(draftData.all_files) && draftData.all_files.length > 0) {
         draftData.all_files.forEach(f => {
@@ -164,6 +166,14 @@ export function openEditModal(draftData, onSaveCallback) {
     document.getElementById('editTaxAmount').value = Number(draftData.tax_amount || 0).toFixed(2);
     document.getElementById('editDiscountAmount').value = Number(draftData.discount_amount || 0).toFixed(2);
     document.getElementById('editGrandTotal').value = Number(draftData.grand_total || 0).toFixed(2);
+
+    const defaultScope = draftData.scope 
+        || (draftData.id ? localStorage.getItem('spendsense_bill_scope_' + draftData.id) : null) 
+        || (localStorage.getItem('spendsense_active_mode') === 'business' ? 'business' : 'personal');
+    const editScopeEl = document.getElementById('editScope');
+    if (editScopeEl) {
+        editScopeEl.value = defaultScope;
+    }
 
     // Populate line items table
     const tableBody = document.getElementById('editItemsBody');
@@ -228,8 +238,18 @@ export function openEditModal(draftData, onSaveCallback) {
             }
         });
 
+        const chosenScope = document.getElementById('editScope')?.value || 'personal';
+        if (draftData.id) {
+            try {
+                localStorage.setItem('spendsense_bill_scope_' + draftData.id, chosenScope);
+            } catch (e) {
+                console.warn('Scope save note:', e);
+            }
+        }
+
         const updatedData = {
             ...draftData,
+            scope: chosenScope,
             merchant_name: document.getElementById('editMerchant').value.trim() || 'Unknown Merchant',
             merchant_type: document.getElementById('editType').value,
             bill_number: document.getElementById('editBillNumber').value.trim() || null,

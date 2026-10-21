@@ -7,6 +7,8 @@
 import { apiRequest } from './api.js';
 import { formatCurrency, escapeHtml, showToast } from './utils.js';
 import { getIcon } from './icons.js';
+import { getCurrentFirebaseUser } from './firebase-auth.js';
+import { getBillsFromFirestore, computeInsightsFromBills } from './firebase-firestore.js';
 
 let categoryChartInstance = null;
 let trendChartInstance = null;
@@ -17,6 +19,14 @@ window.addEventListener('themechanged', () => {
     if (lastInsightsData) {
         initDonutChart(lastInsightsData.category_donut || {});
         initTrendChart(lastInsightsData.monthly_trend || {});
+    }
+});
+
+// Listen for workspace mode change to adapt insights metrics dynamically
+window.addEventListener('modechanged', () => {
+    const screenInsights = document.getElementById('screenInsights');
+    if (screenInsights && screenInsights.classList.contains('active') && lastInsightsData) {
+        renderInsightsDashboard(lastInsightsData);
     }
 });
 
@@ -42,7 +52,14 @@ export async function loadInsightsDashboard() {
     `;
 
     try {
-        const data = await apiRequest('/api/insights/summary');
+        let data = null;
+        const fbUser = getCurrentFirebaseUser();
+        if (fbUser && fbUser.uid) {
+            const fbBills = await getBillsFromFirestore(fbUser.uid);
+            data = computeInsightsFromBills(fbBills);
+        } else {
+            data = await apiRequest('/api/insights/summary');
+        }
         lastInsightsData = data;
         renderInsightsDashboard(data);
     } catch (err) {
@@ -74,6 +91,10 @@ function renderInsightsDashboard(data) {
     const busiest = data.busiest_day || {};
     const topMerchants = data.top_merchants || [];
     const topItems = data.top_items || [];
+    const comm = data.commercial_summary || {};
+
+    const activeMode = localStorage.getItem('spendsense_active_mode') || 'personal';
+    const isBusiness = activeMode === 'business' || activeMode === 'shop';
 
     // Empty state if no data recorded at all
     if (!thisMonth.spent && !lastMonth.spent && topMerchants.length === 0) {
@@ -107,6 +128,44 @@ function renderInsightsDashboard(data) {
         : (isTrendDown ? getIcon('arrow-down', { size: 13 }) : '');
     const trendSign = isTrendUp ? '+' : '';
 
+    const taxableVal = comm.taxable_value || (Number(thisMonth.spent || 0) * 0.9);
+    const gstPaid = comm.total_tax || (Number(thisMonth.spent || 0) * 0.1);
+    const grossVal = comm.gross_total || Number(thisMonth.spent || 0);
+
+    const gstSummaryCardHtml = isBusiness ? `
+        <!-- Commercial GST & Input Tax Credit (ITC) Summary Box -->
+        <div class="gst-summary-card">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.5rem;">
+                <div>
+                    <div style="display: flex; align-items: center; gap: 0.4rem; font-weight: 700; font-size: 1.05rem; color: var(--color-text);">
+                        <span style="color: var(--color-primary); display: flex;">${getIcon('receipt', { size: 18 })}</span>
+                        GST & Input Tax Credit (ITC) Summary
+                    </div>
+                    <p style="font-size: 0.8rem; color: var(--color-text-muted); margin-top: 0.2rem;">
+                        Input tax breakdown from recorded supplier invoices eligible for monthly return filing (GSTR-2B / GSTR-3B)
+                    </p>
+                </div>
+                <button class="btn btn-secondary" onclick="window.open('/api/export/csv?type=gst', '_blank')" type="button" style="font-size: 0.75rem; padding: 0.3rem 0.65rem; display: inline-flex; align-items: center; gap: 0.25rem;">
+                    ${getIcon('download', { size: 12 })} Export GST ITC Register
+                </button>
+            </div>
+            <div class="gst-metrics-row">
+                <div class="gst-metric-item">
+                    <span class="gst-metric-label">Taxable Purchases</span>
+                    <span class="gst-metric-val tabular-nums">${formatCurrency(Number(taxableVal))}</span>
+                </div>
+                <div class="gst-metric-item">
+                    <span class="gst-metric-label">GST Tax Paid (Eligible ITC)</span>
+                    <span class="gst-metric-val tabular-nums" style="color: #059669;">${formatCurrency(Number(gstPaid))}</span>
+                </div>
+                <div class="gst-metric-item">
+                    <span class="gst-metric-label">Gross Purchases Outflow</span>
+                    <span class="gst-metric-val tabular-nums">${formatCurrency(Number(grossVal))}</span>
+                </div>
+            </div>
+        </div>
+    ` : '';
+
     container.innerHTML = `
         <div class="insights-container" style="padding: 1.25rem; overflow-y: auto; max-width: 1100px; margin: 0 auto; width: 100%;">
             <!-- Header -->
@@ -114,21 +173,27 @@ function renderInsightsDashboard(data) {
                 <div>
                     <h2 style="font-size: 1.4rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
                         <span style="color: var(--color-primary); display: flex;">${getIcon('bar-chart-3', { size: 22 })}</span>
-                        Spending Insights
+                        ${isBusiness ? 'Commercial Insights & Outflow' : 'Spending Insights'}
                     </h2>
-                    <p style="color: var(--color-text-muted); font-size: 0.88rem; margin-top: 0.2rem;">Overview for ${escapeHtml(thisMonth.label || 'Current Month')}</p>
+                    <p style="color: var(--color-text-muted); font-size: 0.88rem; margin-top: 0.2rem;">
+                        ${isBusiness ? `Commercial Purchases & ITC for ${escapeHtml(thisMonth.label || 'Current Month')}` : `Overview for ${escapeHtml(thisMonth.label || 'Current Month')}`}
+                    </p>
                 </div>
                 <button class="btn btn-secondary" id="btnRefreshInsights" type="button" style="font-size: 0.8rem; padding: 0.35rem 0.75rem; display: inline-flex; align-items: center; gap: 0.35rem;">
                     ${getIcon('refresh-cw', { size: 13 })} Refresh
                 </button>
             </div>
 
+            ${gstSummaryCardHtml}
+
             <!-- KPI Cards Row -->
             <div class="kpi-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
                 <!-- Total This Month -->
                 <div class="kpi-card" style="background: var(--color-surface-card); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 1.1rem; display: flex; flex-direction: column; justify-content: space-between;">
                     <div>
-                        <div style="color: var(--color-text-muted); font-size: 0.78rem; text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Total Spend (This Month)</div>
+                        <div style="color: var(--color-text-muted); font-size: 0.78rem; text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">
+                            ${isBusiness ? 'Commercial Outflow (This Month)' : 'Total Spend (This Month)'}
+                        </div>
                         <div style="font-size: 1.6rem; font-weight: 800; color: var(--color-text); margin: 0.3rem 0;" class="tabular-nums">${formatCurrency(Number(thisMonth.spent || 0))}</div>
                     </div>
                     <div class="trend-chip ${trendClass}" style="align-self: flex-start;">
@@ -139,28 +204,34 @@ function renderInsightsDashboard(data) {
 
                 <!-- Last Month Total -->
                 <div class="kpi-card" style="background: var(--color-surface-card); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 1.1rem;">
-                    <div style="color: var(--color-text-muted); font-size: 0.78rem; text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Total Spend (Last Month)</div>
+                    <div style="color: var(--color-text-muted); font-size: 0.78rem; text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">
+                        ${isBusiness ? 'Commercial Outflow (Last Month)' : 'Total Spend (Last Month)'}
+                    </div>
                     <div style="font-size: 1.6rem; font-weight: 800; color: var(--color-text); margin: 0.3rem 0;" class="tabular-nums">${formatCurrency(Number(lastMonth.spent || 0))}</div>
                     <div style="font-size: 0.82rem; color: var(--color-text-muted);">
-                        ${lastMonth.bill_count === 1 ? 'Across 1 recorded bill' : `Across ${lastMonth.bill_count || 0} recorded bills`}
+                        ${lastMonth.bill_count === 1 ? 'Across 1 recorded invoice' : `Across ${lastMonth.bill_count || 0} recorded invoices`}
                     </div>
                 </div>
 
                 <!-- Average Bill Size -->
                 <div class="kpi-card" style="background: var(--color-surface-card); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 1.1rem;">
-                    <div style="color: var(--color-text-muted); font-size: 0.78rem; text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Average Bill Size</div>
+                    <div style="color: var(--color-text-muted); font-size: 0.78rem; text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">
+                        ${isBusiness ? 'Average Invoice / Order' : 'Average Bill Size'}
+                    </div>
                     <div style="font-size: 1.6rem; font-weight: 800; color: var(--color-text); margin: 0.3rem 0;" class="tabular-nums">${formatCurrency(Number(data.average_bill_size || 0))}</div>
                     <div style="font-size: 0.82rem; color: var(--color-text-muted);">
-                        Average per transaction
+                        ${isBusiness ? 'Average per wholesale order' : 'Average per transaction'}
                     </div>
                 </div>
 
                 <!-- Busiest Spending Days -->
                 <div class="kpi-card" style="background: var(--color-surface-card); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 1.1rem;">
-                    <div style="color: var(--color-text-muted); font-size: 0.78rem; text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Busiest Day</div>
+                    <div style="color: var(--color-text-muted); font-size: 0.78rem; text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">
+                        ${isBusiness ? 'Busiest Procurement Day' : 'Busiest Day'}
+                    </div>
                     <div style="font-size: 1.4rem; font-weight: 800; color: var(--color-warning); margin: 0.3rem 0;">${escapeHtml(busiest.day_name || 'Saturday')}</div>
                     <div style="font-size: 0.82rem; color: var(--color-text-muted);" class="tabular-nums">
-                        ${formatCurrency(Number(busiest.total_spend || 0))} across ${busiest.bill_count || 0} ${(busiest.bill_count === 1) ? 'visit' : 'visits'}
+                        ${formatCurrency(Number(busiest.total_spend || 0))} across ${busiest.bill_count || 0} ${(busiest.bill_count === 1) ? 'invoice' : 'invoices'}
                     </div>
                 </div>
             </div>

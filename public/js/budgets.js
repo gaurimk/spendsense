@@ -6,6 +6,8 @@
 import { apiRequest } from './api.js';
 import { formatCurrency, escapeHtml, showToast } from './utils.js';
 import { getIcon } from './icons.js';
+import { getCurrentFirebaseUser } from './firebase-auth.js';
+import { getBudgetsFromFirestore, saveBudgetToFirestore, getBillsFromFirestore } from './firebase-firestore.js';
 
 let currentMonth = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
 let cachedCategories = [];
@@ -16,24 +18,40 @@ export async function loadBudgetsTab() {
 
     renderBudgetsContainer(container);
     await fetchAndRenderBudgets();
+
+    if (!container.dataset.modeListenerAttached) {
+        container.dataset.modeListenerAttached = 'true';
+        window.addEventListener('modechanged', () => {
+            const activeScreen = document.querySelector('.screen-view.active');
+            if (activeScreen && activeScreen.id === 'screenBudgets') {
+                renderBudgetsContainer(container);
+                fetchAndRenderBudgets();
+            }
+        });
+    }
 }
 
 function renderBudgetsContainer(container) {
+    const activeMode = localStorage.getItem('spendsense_active_mode') || 'personal';
+    const isBiz = activeMode === 'business';
+
     container.innerHTML = `
         <div class="budgets-container" style="padding: 1.25rem; max-width: 1000px; margin: 0 auto; width: 100%;">
             <!-- Header -->
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem;">
                 <div>
                     <h2 style="font-size: 1.4rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
-                        <span style="color: var(--color-primary); display: flex;">${getIcon('target', { size: 22 })}</span>
-                        Category Budgets
+                        <span style="color: var(--color-primary); display: flex;">${getIcon(isBiz ? 'briefcase' : 'target', { size: 22 })}</span>
+                        ${isBiz ? 'Commercial Operating Budgets' : 'Category Spending Budgets'}
                     </h2>
-                    <p style="color: var(--color-text-muted); font-size: 0.88rem; margin-top: 0.2rem;">Set monthly limits, monitor spending progress, and prevent budget overruns</p>
+                    <p style="color: var(--color-text-muted); font-size: 0.88rem; margin-top: 0.2rem;">
+                        ${isBiz ? 'Set monthly spending limits for procurement, shop supplies, and operating expenses' : 'Set monthly limits, monitor spending progress, and prevent budget overruns'}
+                    </p>
                 </div>
                 <div style="display: flex; gap: 0.5rem; align-items: center;">
                     <input type="month" id="budgetMonthPicker" class="form-control" value="${currentMonth}" style="font-size: 0.85rem; padding: 0.35rem 0.6rem; width: auto;">
                     <button class="btn btn-primary" id="btnOpenSetBudgetModal" type="button" style="font-size: 0.82rem; padding: 0.4rem 0.85rem; display: inline-flex; align-items: center; gap: 0.25rem;">
-                        ${getIcon('plus', { size: 14 })} Set Budget
+                        ${getIcon('plus', { size: 14 })} ${isBiz ? 'Set Expense Limit' : 'Set Budget'}
                     </button>
                 </div>
             </div>
@@ -139,7 +157,80 @@ async function fetchAndRenderBudgets() {
     `;
 
     try {
-        const data = await apiRequest(`/api/budgets?month=${encodeURIComponent(currentMonth)}`);
+        let data = null;
+        const fbUser = getCurrentFirebaseUser();
+        if (fbUser && fbUser.uid) {
+            const [fbBudgets, fbBills] = await Promise.all([
+                getBudgetsFromFirestore(fbUser.uid),
+                getBillsFromFirestore(fbUser.uid)
+            ]);
+            
+            // Calculate spend per category for currentMonth
+            const catSpendMap = {};
+            fbBills.forEach(b => {
+                if ((b.bill_date || '').startsWith(currentMonth)) {
+                    const c = b.category_name || 'General & Miscellaneous';
+                    const amt = Number(b.my_share_total !== undefined && b.my_share_total !== null ? b.my_share_total : b.grand_total) || 0;
+                    catSpendMap[c] = (catSpendMap[c] || 0) + amt;
+                }
+            });
+
+            let totalBudgeted = 0;
+            let totalSpent = 0;
+            const alerts = [];
+            const budgetCards = fbBudgets.map(bg => {
+                const bAmount = Number(bg.monthly_budget || 0);
+                const bSpent = Math.round((catSpendMap[bg.category_name] || 0) * 100) / 100;
+                totalBudgeted += bAmount;
+                totalSpent += bSpent;
+                const pct = bAmount > 0 ? Math.round((bSpent / bAmount) * 100) : 0;
+                
+                let status = 'normal';
+                if (pct >= 100) {
+                    status = 'exceeded';
+                    alerts.push(`Budget exceeded for ${bg.category_name}: ${pct}% used (${formatCurrency(bSpent)} / ${formatCurrency(bAmount)})`);
+                } else if (pct >= 80) {
+                    status = 'warning';
+                    alerts.push(`Budget warning for ${bg.category_name}: ${pct}% reached (${formatCurrency(bSpent)} / ${formatCurrency(bAmount)})`);
+                }
+
+                return {
+                    id: bg.id,
+                    category_id: bg.category_id,
+                    category_name: bg.category_name,
+                    monthly_budget: bAmount,
+                    spent: bSpent,
+                    percentage_used: pct,
+                    remaining: Math.max(0, bAmount - bSpent),
+                    status: status
+                };
+            });
+
+            const overallPct = totalBudgeted > 0 ? Math.round((totalSpent / totalBudgeted) * 100) : 0;
+
+            data = {
+                month: currentMonth,
+                total_budgeted: Math.round(totalBudgeted * 100) / 100,
+                total_spent: Math.round(totalSpent * 100) / 100,
+                overall_percentage: overallPct,
+                alerts: alerts,
+                categories: budgetCards,
+                all_categories: cachedCategories.length > 0 ? cachedCategories : [
+                    { id: 1, name: 'Groceries & Supermarket' },
+                    { id: 2, name: 'Food & Dining' },
+                    { id: 3, name: 'Pharmacy & Healthcare' },
+                    { id: 4, name: 'Electronics & Gadgets' },
+                    { id: 5, name: 'Fuel & Transport' },
+                    { id: 6, name: 'Shopping & Clothing' },
+                    { id: 7, name: 'Utilities & Bills' },
+                    { id: 8, name: 'Stationery & Office' },
+                    { id: 9, name: 'Home & Maintenance' },
+                    { id: 10, name: 'General & Miscellaneous' }
+                ]
+            };
+        } else {
+            data = await apiRequest(`/api/budgets?month=${encodeURIComponent(currentMonth)}`);
+        }
         cachedCategories = data.all_categories || [];
 
         // 1. Render Alerts Banner if any
@@ -324,14 +415,26 @@ async function handleBudgetSubmit(e) {
     }
 
     try {
-        await apiRequest('/api/budgets', {
-            method: 'POST',
-            body: JSON.stringify({
-                category_id: catId,
-                month: month,
-                monthly_amount: amount,
-            }),
-        });
+        const fbUser = getCurrentFirebaseUser();
+        if (fbUser && fbUser.uid) {
+            const catName = select.options[select.selectedIndex]?.text || 'Category';
+            await saveBudgetToFirestore(fbUser.uid, {
+                category_id: String(catId),
+                category_name: catName,
+                monthly_budget: amount
+            });
+        }
+        try {
+            await apiRequest('/api/budgets', {
+                method: 'POST',
+                body: JSON.stringify({
+                    category_id: catId,
+                    month: month,
+                    monthly_amount: amount,
+                }),
+            });
+        } catch (_) {}
+
         modal.classList.remove('open');
         showToast('Budget saved successfully', 'success');
         await fetchAndRenderBudgets();

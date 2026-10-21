@@ -224,6 +224,18 @@ function get_insights_dashboard_data(PDO $pdo, int $userId): array {
         }
     }
 
+    // Commercial / GST Breakdown for current month
+    $taxStmt = $pdo->prepare("
+        SELECT 
+            ROUND(COALESCE(SUM(subtotal), 0), 2) AS taxable_value,
+            ROUND(COALESCE(SUM(tax_amount), 0), 2) AS total_tax,
+            ROUND(COALESCE(SUM(grand_total), 0), 2) AS gross_total
+        FROM bills
+        WHERE user_id = ? AND bill_date BETWEEN ? AND ? AND status != 'discarded'
+    ");
+    $taxStmt->execute([$userId, $curStart, $curEnd]);
+    $taxRow = $taxStmt->fetch();
+
     return [
         'this_month' => [
             'label' => $today->format('F Y'),
@@ -262,5 +274,10 @@ function get_insights_dashboard_data(PDO $pdo, int $userId): array {
         'top_merchants' => $topMerchants,
         'top_items' => $topItems,
         'accuracy_breakdown' => $accuracyBreakdown,
+        'commercial_summary' => [
+            'taxable_value' => (float)($taxRow['taxable_value'] ?? 0.0),
+            'total_tax' => (float)($taxRow['total_tax'] ?? 0.0),
+            'gross_total' => (float)($taxRow['gross_total'] ?? 0.0),
+        ],
     ];
 }

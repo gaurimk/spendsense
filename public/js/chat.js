@@ -10,6 +10,9 @@ import { setUploadLimit } from './auth.js';
 import { prepareBillFiles } from './image-prep.js';
 import { getIcon } from './icons.js';
 import { escapeHtml, renderSafeMarkdown } from './utils.js';
+import { uploadReceiptToStorage } from './firebase-storage.js';
+import { getCurrentFirebaseUser } from './firebase-auth.js';
+import { setupVoiceSearch } from './voice-search.js';
 
 let messagesContainer = null;
 let chatInput = null;
@@ -24,15 +27,16 @@ export function initChat() {
     const fileInput = document.getElementById('fileUploadInput');
     const cameraInput = document.getElementById('cameraUploadInput');
 
-    // Welcome chips click handlers (skip demo button)
-    document.querySelectorAll('.chip-btn').forEach(btn => {
-        if (btn.id === 'btnLoadDemoChip') return;
-        btn.addEventListener('click', () => {
-            if (chatInput) {
-                chatInput.value = btn.textContent.trim();
+    // Delegated click handler for welcome chips and interactive follow-ups
+    document.addEventListener('click', (e) => {
+        const chip = e.target.closest('.chip-btn, .btn-chat-followup');
+        if (chip && chip.id !== 'btnLoadDemoChip') {
+            const promptText = chip.textContent.trim();
+            if (chatInput && promptText) {
+                chatInput.value = promptText;
                 handleSendUserMessage();
             }
-        });
+        }
     });
 
     // Send text message
@@ -121,82 +125,24 @@ export function initChat() {
         }
     }
 
-    // Web Speech API Voice Input
-    setupVoiceInput(chatInput);
+    // Robust Voice Search Input with interim preview & permission diagnostics
+    const micBtn = document.getElementById('btnVoiceInput');
+    if (micBtn && chatInput) {
+        setupVoiceSearch({
+            inputElement: chatInput,
+            micButtonElement: micBtn,
+            placeholderListening: '🎙️ Listening... Speak your spending question (tap mic to stop)',
+            onFinalSubmit: (query) => {
+                if (chatInput) chatInput.focus();
+            }
+        });
+    }
 
     // Drag-and-drop setup
     setupDragAndDrop();
 
     // Load initial chat history from backend
     loadChatHistory();
-}
-
-let recognition = null;
-let isRecordingVoice = false;
-
-function setupVoiceInput(inputEl) {
-    const micBtn = document.getElementById('btnVoiceInput');
-    if (!micBtn) return;
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-        micBtn.style.display = 'none';
-        return;
-    }
-
-    try {
-        recognition = new SpeechRecognition();
-        recognition.continuous = false;
-        recognition.interimResults = false;
-        recognition.lang = 'en-IN';
-
-        recognition.onstart = () => {
-            isRecordingVoice = true;
-            micBtn.classList.add('recording');
-            micBtn.setAttribute('aria-pressed', 'true');
-            micBtn.setAttribute('title', 'Listening... Tap to stop');
-        };
-
-        recognition.onresult = (event) => {
-            if (event.results && event.results[0] && event.results[0][0]) {
-                const transcript = event.results[0][0].transcript;
-                if (inputEl) {
-                    inputEl.value = (inputEl.value ? inputEl.value + ' ' : '') + transcript;
-                    inputEl.focus();
-                }
-            }
-        };
-
-        recognition.onerror = (e) => {
-            console.warn('Voice recognition note:', e.error);
-            isRecordingVoice = false;
-            micBtn.classList.remove('recording');
-            micBtn.setAttribute('aria-pressed', 'false');
-            micBtn.setAttribute('title', 'Speak to SpendSense');
-        };
-
-        recognition.onend = () => {
-            isRecordingVoice = false;
-            micBtn.classList.remove('recording');
-            micBtn.setAttribute('aria-pressed', 'false');
-            micBtn.setAttribute('title', 'Speak to SpendSense');
-        };
-
-        micBtn.addEventListener('click', () => {
-            if (isRecordingVoice) {
-                recognition.stop();
-            } else {
-                try {
-                    recognition.start();
-                } catch (err) {
-                    console.warn('Start voice recognition failed:', err);
-                }
-            }
-        });
-    } catch (e) {
-        console.warn('Web Speech setup note:', e);
-        micBtn.style.display = 'none';
-    }
 }
 
 async function openLiveCameraModal(cameraInput) {
@@ -396,21 +342,8 @@ function attachMessageActions(wrapper, bubble) {
     wrapper.appendChild(actionsRow);
 }
 
-export function appendAssistantMessage(text) {
-    const row = document.createElement('div');
-    row.className = 'message-row assistant';
-    row.innerHTML = `
-        <div class="avatar assistant-avatar" aria-hidden="true">${getIcon('indian-rupee', { size: 16 })}</div>
-        <div class="message-bubble-wrapper">
-            <div class="message-bubble"><div class="bubble-text">${renderSafeMarkdown(text)}</div></div>
-        </div>
-    `;
-    const wrapper = row.querySelector('.message-bubble-wrapper');
-    const bubble = row.querySelector('.message-bubble');
-    attachMessageActions(wrapper, bubble);
-
-    messagesContainer.appendChild(row);
-    scrollToBottom();
+export function appendAssistantMessage(text, followups = null) {
+    appendAssistantMessageWithVis(text, null, followups);
 }
 
 export function appendInsightMessage(insightText) {
@@ -464,8 +397,8 @@ export function showTypingIndicator(message = 'Reading your bill...', progressPe
     row.innerHTML = `
         <div class="avatar assistant-avatar" aria-hidden="true">${getIcon('indian-rupee', { size: 16 })}</div>
         <div class="typing-indicator" style="display: flex; flex-direction: column; min-width: 220px;">
-            <div style="flex; align-items: center; justify-content: space-between; gap: 0.75rem; display: flex;">
-                <span>${escapeHtml(message)}</span>
+            <div style="align-items: center; justify-content: space-between; gap: 0.75rem; display: flex;">
+                <span style="font-weight: 500;">${escapeHtml(message)}</span>
                 <div class="dots-loader">
                     <span></span><span></span><span></span>
                 </div>
@@ -492,20 +425,33 @@ async function handleSendUserMessage() {
     chatInput.value = '';
     appendUserMessage(text);
 
-    showTypingIndicator('Analyzing your spending data...');
+    const activeMode = localStorage.getItem('spendsense_active_mode') || 'personal';
+    const professionalPhrases = activeMode === 'business' ? [
+        'Retrieving supplier invoices and commercial data...',
+        'Calculating procurement metrics and GST credits...',
+        'Reviewing distributor rates and payables...',
+        'Analyzing wholesale purchase history...'
+    ] : [
+        'Analyzing spending data...',
+        'Retrieving ledger records and category breakdowns...',
+        'Reviewing price history and supermarket trends...',
+        'Calculating spending and budget metrics...'
+    ];
+    const typingMsg = professionalPhrases[Math.floor(Math.random() * professionalPhrases.length)];
+    showTypingIndicator(typingMsg);
 
     try {
         const response = await apiRequest('/api/chat/ask', {
             method: 'POST',
-            body: JSON.stringify({ question: text }),
+            body: JSON.stringify({ question: text, mode: activeMode }),
         });
 
         hideTypingIndicator();
 
         if (response && response.answer) {
-            appendAssistantMessageWithVis(response.answer, response.visualization);
+            appendAssistantMessageWithVis(response.answer, response.visualization, response.followups);
         } else {
-            appendAssistantMessage("I couldn't find an answer for that query. Try asking \"Where did I spend the most this month?\" or \"Show my 5 biggest bills\".");
+            appendAssistantMessage("I could not find records matching that inquiry. You may ask questions such as \"Where did I spend the most this month?\" or \"Show my 5 biggest bills\".");
         }
     } catch (err) {
         hideTypingIndicator();
@@ -514,17 +460,37 @@ async function handleSendUserMessage() {
     }
 }
 
-export function appendAssistantMessageWithVis(text, visualization = null) {
+export function appendAssistantMessageWithVis(text, visualization = null, followups = null) {
     const row = document.createElement('div');
     row.className = 'message-row assistant';
     
     const formattedText = renderSafeMarkdown(text);
+
+    // Only render followups if explicitly provided by backend analysis
+    const validFollowups = (Array.isArray(followups)) 
+        ? followups.filter(f => typeof f === 'string' && f.trim().length > 0) 
+        : [];
+
+    const followupsHtml = (validFollowups.length > 0) ? `
+        <div class="message-followups">
+            <div class="followups-header">
+                ${getIcon('corner-down-right', { size: 12 })} <span>Suggested inquiries:</span>
+            </div>
+            ${validFollowups.map(f => `
+                <button type="button" class="btn-chat-followup">
+                    ${escapeHtml(f)}
+                </button>
+            `).join('')}
+        </div>
+    ` : '';
+
     row.innerHTML = `
         <div class="avatar assistant-avatar" aria-hidden="true">${getIcon('indian-rupee', { size: 16 })}</div>
         <div class="message-bubble-wrapper" style="max-width: 600px; width: 100%;">
             <div class="message-bubble">
                 <div class="bubble-text" style="line-height: 1.6;">${formattedText}</div>
                 <div class="vis-container" style="margin-top: 0.75rem;"></div>
+                ${followupsHtml}
             </div>
         </div>
     `;
@@ -748,6 +714,22 @@ export async function uploadBillFile(fileInput) {
         hideTypingIndicator();
 
         if (response.success && response.draft) {
+            // Upload receipt file to Firebase Cloud Storage if user is signed in
+            try {
+                const firebaseUser = getCurrentFirebaseUser();
+                if (firebaseUser && firebaseUser.uid && prep.files && prep.files[0]) {
+                    const storageRes = await uploadReceiptToStorage(
+                        firebaseUser.uid,
+                        prep.files[0].blob,
+                        prep.files[0].name
+                    );
+                    response.draft.storage_url = storageRes.downloadUrl;
+                    response.draft.storage_path = storageRes.storagePath;
+                }
+            } catch (storageErr) {
+                console.warn('Firebase Cloud Storage upload note:', storageErr.message);
+            }
+
             // Render structured bill summary card in chat
             const cardRow = document.createElement('div');
             cardRow.className = 'message-row assistant';
@@ -836,7 +818,9 @@ export async function loadChatHistory() {
                     if (msg.metadata && msg.metadata.type === 'bill_confirmed') {
                         appendInsightMessage(msg.message_text);
                     } else {
-                        appendAssistantMessage(msg.message_text);
+                        const vis = msg.metadata?.visualization || null;
+                        const followups = msg.metadata?.followups || null;
+                        appendAssistantMessageWithVis(msg.message_text, vis, followups);
                     }
                 }
             });

@@ -1,8 +1,19 @@
 /**
  * SpendSense - Authentication & User State Module (ES Module)
+ * Powered by Firebase Authentication (Email/Password & Google Sign-In)
+ * with Cloud Firestore user document synchronization.
  */
 
 import { apiRequest, setCsrfToken } from './api.js';
+import {
+    loginWithEmail as firebaseLoginWithEmail,
+    registerWithEmail as firebaseRegisterWithEmail,
+    loginWithGoogle as firebaseLoginWithGoogle,
+    logoutFirebase,
+    initAuthListener,
+    getCurrentFirebaseUser,
+    getCurrentAppUser
+} from './firebase-auth.js';
 
 let currentUser = null;
 let currentSettings = null;
@@ -48,6 +59,7 @@ export function updateUploadPill() {
 }
 
 export async function checkAuthState() {
+    // 1. Check existing backend session first
     try {
         const data = await apiRequest('/api/auth/me');
         if (data.authenticated) {
@@ -57,56 +69,105 @@ export async function checkAuthState() {
             if (data.csrf_token) setCsrfToken(data.csrf_token);
             updateUserUI();
             return true;
-        } else {
-            currentUser = null;
-            if (data.csrf_token) setCsrfToken(data.csrf_token);
-            updateUserUI();
-            return false;
         }
     } catch (e) {
-        console.error('Auth state check error:', e);
-        currentUser = null;
+        console.warn('Backend session check:', e.message);
+    }
+
+    // 2. Listen to Firebase Auth state
+    return new Promise((resolve) => {
+        initAuthListener((firebaseData) => {
+            if (firebaseData && (firebaseData.authenticated || firebaseData.user)) {
+                currentUser = firebaseData.user;
+                currentSettings = firebaseData.settings;
+                uploadLimitInfo = firebaseData.upload_limit || { count: 0, limit: 20 };
+                if (firebaseData.csrf_token) setCsrfToken(firebaseData.csrf_token);
+                updateUserUI();
+                resolve(true);
+            } else {
+                currentUser = null;
+                updateUserUI();
+                resolve(false);
+            }
+        });
+    });
+}
+
+/**
+ * Register with Firebase Email & Password
+ */
+export async function register(fullName, email, password, currency, usageType) {
+    try {
+        const data = await firebaseRegisterWithEmail(fullName, email, password, currency, usageType);
+        currentUser = data.user;
+        currentSettings = data.settings;
+        if (data.csrf_token) setCsrfToken(data.csrf_token);
         updateUserUI();
-        return false;
+        return data;
+    } catch (firebaseErr) {
+        // Humanize Firebase error codes
+        throw mapFirebaseError(firebaseErr);
     }
 }
 
-export async function register(fullName, email, password, currency, usageType) {
-    const data = await apiRequest('/api/auth/register', {
-        method: 'POST',
-        body: JSON.stringify({
-            full_name: fullName,
-            email: email,
-            password: password,
-            currency: currency || 'INR',
-            usage_type: usageType || 'personal',
-        }),
-    });
-    currentUser = data.user;
-    currentSettings = data.settings;
-    if (data.csrf_token) setCsrfToken(data.csrf_token);
-    updateUserUI();
-    return data;
-}
-
+/**
+ * Log In with Firebase Email & Password
+ */
 export async function login(email, password) {
-    const data = await apiRequest('/api/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-    });
-    currentUser = data.user;
-    currentSettings = data.settings;
-    if (data.csrf_token) setCsrfToken(data.csrf_token);
-    updateUserUI();
-    return data;
+    try {
+        const data = await firebaseLoginWithEmail(email, password);
+        currentUser = data.user;
+        currentSettings = data.settings;
+        if (data.csrf_token) setCsrfToken(data.csrf_token);
+        updateUserUI();
+        return data;
+    } catch (firebaseErr) {
+        throw mapFirebaseError(firebaseErr);
+    }
 }
 
+/**
+ * Sign In with Google Popup
+ */
+export async function googleSignIn() {
+    try {
+        const data = await firebaseLoginWithGoogle();
+        currentUser = data.user;
+        currentSettings = data.settings;
+        if (data.csrf_token) setCsrfToken(data.csrf_token);
+        updateUserUI();
+        return data;
+    } catch (firebaseErr) {
+        throw mapFirebaseError(firebaseErr);
+    }
+}
+
+/**
+ * Log out user from Firebase and local session
+ */
 export async function logout() {
-    await apiRequest('/api/auth/logout', { method: 'POST' });
-    currentUser = null;
-    currentSettings = null;
-    updateUserUI();
-    window.location.reload();
+    await logoutFirebase();
+}
+
+function mapFirebaseError(err) {
+    const code = err.code || '';
+    let msg = err.message || 'Authentication error';
+    if (code === 'auth/email-already-in-use') {
+        msg = 'An account with this email address already exists. Please log in.';
+    } else if (code === 'auth/invalid-email') {
+        msg = 'Please enter a valid email address.';
+    } else if (code === 'auth/weak-password') {
+        msg = 'Password should be at least 6 characters.';
+    } else if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+        msg = 'Incorrect email or password. Please try again.';
+    } else if (code === 'auth/popup-closed-by-user') {
+        msg = 'Google Sign-in was cancelled before completion.';
+    } else if (code === 'auth/unauthorized-domain') {
+        msg = 'This domain is not authorized for Google Sign-in in Firebase Console. Please add localhost to Authorized Domains.';
+    }
+    const e = new Error(msg);
+    e.code = code;
+    return e;
 }
 
 function getInitials(name) {
@@ -118,7 +179,7 @@ function getInitials(name) {
     return parts[0].slice(0, 2).toUpperCase();
 }
 
-function updateUserUI() {
+export function updateUserUI() {
     const userMenuContainer = document.getElementById('userMenuContainer');
     const userAvatarInitials = document.getElementById('userAvatarInitials');
     const railAvatarInitials = document.getElementById('railAvatarInitials');

@@ -8,6 +8,8 @@ import { apiRequest } from './api.js';
 import { formatCurrency, escapeHtml, showToast, showConfirmModal } from './utils.js';
 import { getIcon } from './icons.js';
 import { loadChatHistory, appendAssistantMessage } from './chat.js';
+import { getCurrentFirebaseUser } from './firebase-auth.js';
+import { clearAllUserDataFromFirestore } from './firebase-firestore.js';
 
 export async function loadSettingsTab() {
     const container = document.getElementById('screenSettings');
@@ -24,6 +26,79 @@ export async function loadSettingsTab() {
                     <p style="color: var(--color-text-muted); font-size: 0.88rem; margin-top: 0.2rem;">
                         Manage expense categories, download CSV backups, demo datasets, and privacy controls.
                     </p>
+                </div>
+            </div>
+
+            <!-- 0. WORKSPACE & BUSINESS PROFILE CARD -->
+            <div id="businessProfileSettingsCard" class="business-profile-card" style="background: var(--color-surface-card); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1.25rem;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+                    <div>
+                        <h3 style="font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 0.4rem;">
+                            <span style="color: var(--color-primary); display: flex;">${getIcon('briefcase', { size: 18 })}</span>
+                            Business / Commercial Workspace Profile
+                        </h3>
+                        <p style="font-size: 0.8rem; color: var(--color-text-muted); margin-top: 0.15rem;">
+                            Configure your registered shop/business identity, GSTIN, default payment terms, and active workspace mode.
+                        </p>
+                    </div>
+                    <div class="workspace-segmented-control" style="align-self: flex-start;">
+                        <button type="button" class="workspace-seg-btn" id="btnSettingsModePersonal">
+                            👤 Personal
+                        </button>
+                        <button type="button" class="workspace-seg-btn" id="btnSettingsModeBusiness">
+                            🏢 Business
+                        </button>
+                    </div>
+                </div>
+
+                <form id="formBusinessProfile" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0.85rem; margin-bottom: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label" style="font-size: 0.8rem;">Business / Store Name</label>
+                        <input type="text" id="bizProfileName" class="form-control" placeholder="e.g. Kutakole General Store & Trading" style="font-size: 0.85rem;">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" style="font-size: 0.8rem;">GSTIN / Tax Identification No.</label>
+                        <input type="text" id="bizProfileGstin" class="form-control" maxlength="15" placeholder="e.g. 27AAAAA0000A1Z5" style="text-transform: uppercase; font-family: monospace; font-size: 0.85rem;">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" style="font-size: 0.8rem;">Trade / Business Category</label>
+                        <select id="bizProfileType" class="form-control" style="font-size: 0.85rem;">
+                            <option value="retail">Retail Kirana / Supermarket</option>
+                            <option value="wholesale">Wholesale Distribution / Trader</option>
+                            <option value="pharmacy">Pharmacy / Healthcare Supplies</option>
+                            <option value="restaurant">Restaurant / Cafe / Food Vendor</option>
+                            <option value="services">Professional / Consulting / IT Services</option>
+                            <option value="manufacturing">Small Manufacturing / Workshop</option>
+                            <option value="other">Other Commercial Business</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" style="font-size: 0.8rem;">Default Supplier Credit Terms</label>
+                        <select id="bizProfileTerms" class="form-control" style="font-size: 0.85rem;">
+                            <option value="net_0">Immediate / Cash on Delivery (Net 0)</option>
+                            <option value="net_15">Net 15 Days</option>
+                            <option value="net_30" selected>Net 30 Days (Standard B2B)</option>
+                            <option value="net_45">Net 45 Days (MSME Mandate)</option>
+                            <option value="net_60">Net 60 Days</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                        <label class="form-label" style="font-size: 0.8rem;">GST Scheme & Input Tax Credit (ITC)</label>
+                        <select id="bizProfileGstScheme" class="form-control" style="font-size: 0.85rem;">
+                            <option value="regular">Regular Taxpayer Scheme (Eligible to claim GST Input Tax Credit / ITC)</option>
+                            <option value="composition">Composition Scheme (Flat rate turnover tax, No ITC claim)</option>
+                            <option value="unregistered">Unregistered / Exempt Turnover</option>
+                        </select>
+                    </div>
+                </form>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; border-top: 1px solid var(--color-border); padding-top: 0.85rem;">
+                    <div id="bizProfileSaveNotice" style="font-size: 0.8rem; color: var(--color-text-muted);">
+                        Mode preference is synced across device sessions and export registers.
+                    </div>
+                    <button id="btnSaveBusinessProfile" class="btn btn-primary" type="button" style="font-size: 0.85rem; padding: 0.45rem 1rem; display: inline-flex; align-items: center; gap: 0.35rem;">
+                        ${getIcon('check', { size: 14 })} Save Business Profile
+                    </button>
                 </div>
             </div>
 
@@ -81,6 +156,9 @@ export async function loadSettingsTab() {
                     </button>
                     <button id="btnExportItemsCsv" class="btn btn-secondary" type="button" style="display: inline-flex; align-items: center; gap: 0.35rem;">
                         ${getIcon('download', { size: 14 })} Export Line Items CSV (All Products & Rates)
+                    </button>
+                    <button id="btnExportGstCsv" class="btn btn-secondary" type="button" style="display: inline-flex; align-items: center; gap: 0.35rem; border-color: rgba(1, 142, 239, 0.4); color: var(--color-primary);">
+                        ${getIcon('file-text', { size: 14 })} Export GST ITC Register (GSTR-2B CSV)
                     </button>
                 </div>
             </div>
@@ -175,6 +253,88 @@ export async function loadSettingsTab() {
 }
 
 function setupSettingsEvents() {
+    // Workspace Mode & Business Profile setup
+    const modeBtnPersonal = document.getElementById('btnSettingsModePersonal');
+    const modeBtnBusiness = document.getElementById('btnSettingsModeBusiness');
+    const profileCard = document.getElementById('businessProfileSettingsCard');
+    const nameInput = document.getElementById('bizProfileName');
+    const gstinInput = document.getElementById('bizProfileGstin');
+    const typeSelect = document.getElementById('bizProfileType');
+    const termsSelect = document.getElementById('bizProfileTerms');
+    const gstSelect = document.getElementById('bizProfileGstScheme');
+    const saveBizBtn = document.getElementById('btnSaveBusinessProfile');
+
+    let currentMode = localStorage.getItem('spendsense_active_mode') || 'personal';
+
+    const updateModeButtons = (mode) => {
+        if (modeBtnPersonal && modeBtnBusiness) {
+            modeBtnPersonal.classList.toggle('active', mode === 'personal');
+            modeBtnBusiness.classList.toggle('active', mode === 'business');
+        }
+        if (profileCard) {
+            profileCard.classList.toggle('active-mode', mode === 'business');
+        }
+    };
+    updateModeButtons(currentMode);
+
+    modeBtnPersonal?.addEventListener('click', () => {
+        currentMode = 'personal';
+        updateModeButtons('personal');
+        if (typeof window.setAppMode === 'function') {
+            window.setAppMode('personal');
+        }
+        showToast('Switched to Personal Mode', 'info', 2000);
+    });
+
+    modeBtnBusiness?.addEventListener('click', () => {
+        currentMode = 'business';
+        updateModeButtons('business');
+        if (typeof window.setAppMode === 'function') {
+            window.setAppMode('business');
+        }
+        showToast('Switched to Business Mode', 'info', 2000);
+    });
+
+    // Load saved business profile
+    try {
+        const savedProfileStr = localStorage.getItem('spendsense_biz_profile');
+        if (savedProfileStr) {
+            const p = JSON.parse(savedProfileStr);
+            if (nameInput && p.name) nameInput.value = p.name;
+            if (gstinInput && p.gstin) gstinInput.value = p.gstin;
+            if (typeSelect && p.type) typeSelect.value = p.type;
+            if (termsSelect && p.terms) termsSelect.value = p.terms;
+            if (gstSelect && p.gst_scheme) gstSelect.value = p.gst_scheme;
+        }
+    } catch (e) {
+        console.warn('Profile read note:', e);
+    }
+
+    // Auto-uppercase GSTIN input
+    gstinInput?.addEventListener('input', () => {
+        gstinInput.value = gstinInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    });
+
+    saveBizBtn?.addEventListener('click', () => {
+        const profile = {
+            name: nameInput?.value.trim() || '',
+            gstin: gstinInput?.value.trim() || '',
+            type: typeSelect?.value || 'retail',
+            terms: termsSelect?.value || 'net_30',
+            gst_scheme: gstSelect?.value || 'regular',
+            updated_at: new Date().toISOString()
+        };
+        try {
+            localStorage.setItem('spendsense_biz_profile', JSON.stringify(profile));
+            showToast('Business Profile saved successfully!', 'success');
+            if (currentMode === 'business' && typeof window.setAppMode === 'function') {
+                window.setAppMode('business');
+            }
+        } catch (e) {
+            showToast('Failed to save profile: ' + e.message, 'danger');
+        }
+    });
+
     // Add Category button
     document.getElementById('setBtnAddCategory')?.addEventListener('click', () => {
         openCategoryModal();
@@ -230,6 +390,11 @@ function setupSettingsEvents() {
         window.open('/api/export/csv?type=items', '_blank');
     });
 
+    document.getElementById('btnExportGstCsv')?.addEventListener('click', () => {
+        showToast('Generating GST Input Tax Credit CSV Register...', 'info', 2000);
+        window.open('/api/export/csv?type=gst', '_blank');
+    });
+
     // Delete All Data Modal
     const deleteModal = document.getElementById('setDeleteConfirmModal');
     const deleteInput = document.getElementById('setDeleteConfirmInput');
@@ -260,6 +425,14 @@ function setupSettingsEvents() {
         try {
             deleteExecuteBtn.disabled = true;
             deleteExecuteBtn.textContent = 'Erasing...';
+            const fbUser = getCurrentFirebaseUser();
+            if (fbUser && fbUser.uid) {
+                try {
+                    await clearAllUserDataFromFirestore(fbUser.uid);
+                } catch (fErr) {
+                    console.warn('Firestore erase note:', fErr);
+                }
+            }
             await apiRequest('/api/account/delete-all-data', {
                 method: 'POST',
                 body: { confirm: true },

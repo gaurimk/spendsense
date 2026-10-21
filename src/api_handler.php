@@ -88,6 +88,26 @@ function handle_api_request(): void {
         json_response($result, 200);
     }
 
+    if ($uri === '/api/auth/firebase-sync' && $method === 'POST') {
+        $firebaseUid = (string)($input['uid'] ?? '');
+        $email = (string)($input['email'] ?? '');
+        $fullName = (string)($input['full_name'] ?? '');
+        $currency = (string)($input['currency'] ?? 'INR');
+        $usageType = (string)($input['usage_type'] ?? 'personal');
+
+        if ($firebaseUid === '' || $email === '') {
+            json_error('Firebase user credentials (uid and email) are required.', 400);
+        }
+
+        $result = sync_firebase_user($pdo, $firebaseUid, $email, $fullName, $currency, $usageType);
+        json_response($result, 200);
+    }
+
+    if ($uri === '/api/auth/demo' && $method === 'POST') {
+        $result = login_or_create_demo_user($pdo);
+        json_response($result, 200);
+    }
+
     if ($uri === '/api/auth/logout' && $method === 'POST') {
         require_csrf();
         logout_user();
@@ -392,11 +412,19 @@ function handle_api_request(): void {
         $userMsgStmt->execute([$userId, $question, $now]);
 
         // Process query with Gemini Function Calling (or fallback)
-        $aiResult = answer_user_query_with_gemini($pdo, $userId, $question, $currency);
+        $mode = (string)($input['mode'] ?? (($userInfo['settings']['shop_mode'] ?? 0) ? 'business' : 'personal'));
+        $aiResult = answer_user_query_with_gemini($pdo, $userId, $question, $currency, $mode);
 
         // Save assistant response to chat history
-        $metaJson = !empty($aiResult['visualization']) 
-            ? json_encode(['visualization' => $aiResult['visualization']], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) 
+        $metaToSave = [];
+        if (!empty($aiResult['visualization'])) {
+            $metaToSave['visualization'] = $aiResult['visualization'];
+        }
+        if (!empty($aiResult['followups'])) {
+            $metaToSave['followups'] = $aiResult['followups'];
+        }
+        $metaJson = !empty($metaToSave) 
+            ? json_encode($metaToSave, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) 
             : null;
 
         $assistantMsgStmt = $pdo->prepare('
@@ -412,6 +440,7 @@ function handle_api_request(): void {
             'answer' => $aiResult['text'],
             'visualization' => $aiResult['visualization'] ?? null,
             'function_called' => $aiResult['function_called'] ?? null,
+            'followups' => $aiResult['followups'] ?? null,
         ]);
     }
 
@@ -903,6 +932,45 @@ function handle_api_request(): void {
             $stmt->execute([$userId]);
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 fputcsv($out, $row);
+            }
+            fclose($out);
+            exit;
+        } elseif ($type === 'gst' || $type === 'itc') {
+            header('Content-Type: text/csv; charset=UTF-8');
+            header("Content-Disposition: attachment; filename=\"spendsense_gst_itc_register_{$todayStr}.csv\"");
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['Invoice ID', 'Date', 'Supplier / Vendor', 'Merchant Category', 'Invoice Number', 'Payment Method', 'Taxable Subtotal (Rs)', 'CGST (Rs)', 'SGST (Rs)', 'Total GST Tax Paid (Rs)', 'Gross Invoice Total (Rs)', 'Eligible ITC Status']);
+            $stmt = $pdo->prepare("
+                SELECT id, bill_date, merchant_name, merchant_type, bill_number, payment_method,
+                       subtotal, tax_amount, discount_amount, grand_total
+                FROM bills
+                WHERE user_id = ? AND status != 'discarded'
+                ORDER BY bill_date DESC, id DESC
+            ");
+            $stmt->execute([$userId]);
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $subtotal = (float)($row['subtotal'] ?? 0);
+                $taxAmount = (float)($row['tax_amount'] ?? 0);
+                $grandTotal = (float)($row['grand_total'] ?? 0);
+                if ($subtotal <= 0) {
+                    $subtotal = max(0, $grandTotal - $taxAmount);
+                }
+                $halfGst = round($taxAmount / 2, 2);
+                $itcStatus = $taxAmount > 0 ? 'Eligible for ITC' : 'Nil / Exempt';
+                fputcsv($out, [
+                    $row['id'],
+                    $row['bill_date'],
+                    $row['merchant_name'],
+                    $row['merchant_type'] ?? 'General Supplier',
+                    $row['bill_number'] ?? 'N/A',
+                    $row['payment_method'] ?? 'Not Stated',
+                    number_format($subtotal, 2, '.', ''),
+                    number_format($halfGst, 2, '.', ''),
+                    number_format($halfGst, 2, '.', ''),
+                    number_format($taxAmount, 2, '.', ''),
+                    number_format($grandTotal, 2, '.', ''),
+                    $itcStatus
+                ]);
             }
             fclose($out);
             exit;

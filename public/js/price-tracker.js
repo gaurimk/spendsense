@@ -7,6 +7,9 @@
 import { apiRequest } from './api.js';
 import { formatCurrency, formatDate, escapeHtml } from './utils.js';
 import { getIcon } from './icons.js';
+import { setupVoiceSearch } from './voice-search.js';
+import { getCurrentFirebaseUser } from './firebase-auth.js';
+import { getBillsFromFirestore, searchItemPriceHistoryInBills } from './firebase-firestore.js';
 
 let priceChartInstance = null;
 let currentTrackedItem = 'milk';
@@ -41,10 +44,17 @@ export async function loadPriceTrackerTab() {
             <div style="background: var(--color-surface-card); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1.25rem;">
                 <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem;">
                     <div style="flex: 1; min-width: 220px; position: relative;">
-                        <input type="text" id="ptItemSearchInput" class="form-control" placeholder="Search item (e.g. Milk, Rice, Oil, Biscuits)..." autocomplete="off" style="font-size: 0.95rem; padding-left: 2.2rem;">
+                        <input type="text" id="ptItemSearchInput" class="form-control" placeholder="Search item (e.g. Milk, Rice, Oil, Biscuits)..." autocomplete="off" style="font-size: 0.95rem; padding-left: 2.2rem; padding-right: 2.2rem;">
                         <span style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); color: var(--color-text-muted); display: flex;">
                             ${getIcon('search', { size: 16 })}
                         </span>
+                        <button type="button" id="btnPtVoiceSearch" class="btn-input-voice" title="Voice search item to track" aria-label="Voice search item to track">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                                <line x1="12" x2="12" y1="19" y2="22" />
+                            </svg>
+                        </button>
                     </div>
                     <button id="ptBtnSearch" class="btn btn-primary" type="button" style="white-space: nowrap; display: inline-flex; align-items: center; gap: 0.35rem;">
                         ${getIcon('tag', { size: 14 })} Track Price
@@ -153,6 +163,19 @@ export async function loadPriceTrackerTab() {
         }
     });
 
+    // Voice search for price tracker
+    const ptVoiceBtn = document.getElementById('btnPtVoiceSearch');
+    if (searchInput && ptVoiceBtn) {
+        setupVoiceSearch({
+            inputElement: searchInput,
+            micButtonElement: ptVoiceBtn,
+            placeholderListening: '🎙️ Speak grocery or item name...',
+            onFinalSubmit: (query) => {
+                if (query.trim()) trackItem(query.trim());
+            }
+        });
+    }
+
     // Load available items
     await loadTrackedItemsList();
 
@@ -167,8 +190,27 @@ async function loadTrackedItemsList() {
     if (!chipsContainer) return;
 
     try {
-        const res = await apiRequest('/api/price-tracker/items');
-        const items = res.items || [];
+        let items = [];
+        const fbUser = getCurrentFirebaseUser();
+        if (fbUser && fbUser.uid) {
+            const fbBills = await getBillsFromFirestore(fbUser.uid);
+            const itemCounts = {};
+            fbBills.forEach(b => {
+                if (Array.isArray(b.line_items)) {
+                    b.line_items.forEach(it => {
+                        const name = (it.item_name || '').trim();
+                        if (name) {
+                            if (!itemCounts[name]) itemCounts[name] = { item_name: name, avg_price: Number(it.unit_price || it.total_price || 0), count: 0 };
+                            itemCounts[name].count++;
+                        }
+                    });
+                }
+            });
+            items = Object.values(itemCounts).sort((a, b) => b.count - a.count);
+        } else {
+            const res = await apiRequest('/api/price-tracker/items');
+            items = res.items || [];
+        }
 
         if (items.length === 0) {
             chipsContainer.innerHTML = `
@@ -212,7 +254,14 @@ async function trackItem(itemName) {
     const emptyState = document.getElementById('ptEmptyState');
 
     try {
-        const data = await apiRequest(`/api/price-tracker/history?item=${encodeURIComponent(itemName)}`);
+        let data = null;
+        const fbUser = getCurrentFirebaseUser();
+        if (fbUser && fbUser.uid) {
+            const fbBills = await getBillsFromFirestore(fbUser.uid);
+            data = searchItemPriceHistoryInBills(fbBills, itemName);
+        } else {
+            data = await apiRequest(`/api/price-tracker/history?item=${encodeURIComponent(itemName)}`);
+        }
 
         if (!data || !data.history || data.history.length === 0) {
             if (emptyState) {

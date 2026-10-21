@@ -7,6 +7,11 @@
 import { apiRequest } from './api.js';
 import { formatCurrency, formatDate, escapeHtml, showToast, showConfirmModal } from './utils.js';
 import { getIcon } from './icons.js';
+import { setupVoiceSearch } from './voice-search.js';
+import { getCurrentFirebaseUser } from './firebase-auth.js';
+import { getBillsFromFirestore, deleteBillFromFirestore, updateBillSplitsInFirestore } from './firebase-firestore.js';
+
+let firestoreBillsCache = [];
 
 let currentFilter = {
     search: '',
@@ -15,7 +20,40 @@ let currentFilter = {
     end_date: '',
     min_amount: '',
     max_amount: '',
+    workspace_scope: 'all',
 };
+
+export function getBillWorkspaceScope(b) {
+    const override = localStorage.getItem('spendsense_bill_scope_' + b.id);
+    if (override === 'personal' || override === 'business') {
+        return override;
+    }
+    const name = (b.merchant_name || '').toLowerCase();
+    const type = (b.merchant_type || '').toLowerCase();
+    const summary = (b.categories_summary || '').toLowerCase();
+    const hasTax = Number(b.tax_amount || 0) > 0;
+
+    if (
+        hasTax ||
+        type.includes('wholesale') ||
+        type.includes('supplier') ||
+        type.includes('distributor') ||
+        type.includes('vendor') ||
+        name.includes('wholesale') ||
+        name.includes('distributor') ||
+        name.includes('enterprise') ||
+        name.includes('stationery') ||
+        name.includes('hardware') ||
+        name.includes('solutions') ||
+        name.includes('traders') ||
+        name.includes('corp') ||
+        name.includes('ltd') ||
+        summary.includes('stationery & office')
+    ) {
+        return 'business';
+    }
+    return 'personal';
+}
 
 export async function loadBillsTab() {
     const container = document.getElementById('screenBills');
@@ -33,9 +71,9 @@ function renderBillsContainer(container) {
                 <div>
                     <h2 style="font-size: 1.4rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
                         <span style="color: var(--color-primary); display: flex;">${getIcon('receipt', { size: 22 })}</span>
-                        Saved Bills
+                        Saved Bills & Invoices
                     </h2>
-                    <p style="color: var(--color-text-muted); font-size: 0.88rem; margin-top: 0.2rem;">Search, inspect line items, view attachments, and manage records</p>
+                    <p style="color: var(--color-text-muted); font-size: 0.88rem; margin-top: 0.2rem;">Search, inspect line items, track GST tax, and manage personal & business records</p>
                 </div>
                 <div id="billsCountBadge" style="font-size: 0.82rem; background: var(--color-surface-raised); padding: 0.35rem 0.75rem; border-radius: var(--radius-full); border: 1px solid var(--color-border); color: var(--color-text-muted); font-weight: 500;">
                     Loading...
@@ -44,11 +82,43 @@ function renderBillsContainer(container) {
 
             <!-- Filters Bar -->
             <div class="bills-filters" style="background: var(--color-surface-card); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 1rem; margin-bottom: 1.25rem;">
+                <!-- Workspace Scope Segmented Control -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem; border-bottom: 1px solid var(--color-border); padding-bottom: 0.75rem;">
+                    <div class="workspace-segmented-control" id="billsWorkspaceScope">
+                        <button type="button" class="workspace-seg-btn ${currentFilter.workspace_scope === 'all' ? 'active' : ''}" data-scope="all">
+                            All Records
+                        </button>
+                        <button type="button" class="workspace-seg-btn ${currentFilter.workspace_scope === 'personal' ? 'active' : ''}" data-scope="personal">
+                            👤 Personal Bills
+                        </button>
+                        <button type="button" class="workspace-seg-btn ${currentFilter.workspace_scope === 'business' ? 'active' : ''}" data-scope="business">
+                            🏢 Business Invoices
+                        </button>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+                        <span id="billsScopeHelper" style="font-size: 0.78rem; color: var(--color-text-muted);">
+                            Showing all personal & business expenses
+                        </span>
+                        <button type="button" id="btnExportScopeRegister" class="btn btn-secondary" style="font-size: 0.78rem; padding: 0.25rem 0.65rem; display: inline-flex; align-items: center; gap: 0.3rem;">
+                            ${getIcon('download', { size: 12 })} Export Register (CSV)
+                        </button>
+                    </div>
+                </div>
+
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin-bottom: 0.75rem;">
                     <!-- Search -->
                     <div class="form-group">
                         <label class="form-label" style="font-size: 0.78rem;">Search Merchant / Bill #</label>
-                        <input type="text" class="form-control" id="filterSearch" placeholder="e.g. DMart, Pharmacy..." style="font-size: 0.85rem;">
+                        <div style="position: relative; display: flex; align-items: center;">
+                            <input type="text" class="form-control" id="filterSearch" placeholder="e.g. DMart, Pharmacy, Wholesale..." style="font-size: 0.85rem; padding-right: 2.2rem;">
+                            <button type="button" id="btnBillsVoiceSearch" class="btn-input-voice" title="Voice search merchant or bill" aria-label="Voice search merchant or bill">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                                    <line x1="12" x2="12" y1="19" y2="22" />
+                                </svg>
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Category -->
@@ -150,6 +220,55 @@ function renderBillsContainer(container) {
         </div>
     `;
 
+    // Scope filter buttons listener
+    const scopeContainer = document.getElementById('billsWorkspaceScope');
+    if (scopeContainer) {
+        scopeContainer.querySelectorAll('.workspace-seg-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                scopeContainer.querySelectorAll('.workspace-seg-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentFilter.workspace_scope = btn.getAttribute('data-scope') || 'all';
+                const helper = document.getElementById('billsScopeHelper');
+                if (helper) {
+                    if (currentFilter.workspace_scope === 'personal') {
+                        helper.textContent = 'Showing only Personal household & daily bills';
+                    } else if (currentFilter.workspace_scope === 'business') {
+                        helper.textContent = 'Showing only Commercial invoices, suppliers & GST records';
+                    } else {
+                        helper.textContent = 'Showing all personal & business expenses';
+                    }
+                }
+                fetchAndRenderBills();
+            });
+        });
+    }
+
+    // Export Scope Register listener
+    document.getElementById('btnExportScopeRegister')?.addEventListener('click', () => {
+        if (currentFilter.workspace_scope === 'business') {
+            showToast('Downloading GSTR-2B Commercial Register CSV...', 'info', 2000);
+            window.open('/api/export/csv?type=gst', '_blank');
+        } else {
+            showToast('Downloading Bills CSV...', 'info', 2000);
+            window.open('/api/export/csv?type=bills', '_blank');
+        }
+    });
+
+    // Voice Search for Bills
+    const billsSearchInput = document.getElementById('filterSearch');
+    const billsVoiceBtn = document.getElementById('btnBillsVoiceSearch');
+    if (billsSearchInput && billsVoiceBtn) {
+        setupVoiceSearch({
+            inputElement: billsSearchInput,
+            micButtonElement: billsVoiceBtn,
+            placeholderListening: '🎙️ Speak merchant or bill #...',
+            onFinalSubmit: (query) => {
+                currentFilter.search = query.trim();
+                fetchAndRenderBills();
+            }
+        });
+    }
+
     // Filter listeners
     document.getElementById('btnApplyFilters').onclick = () => {
         currentFilter.search = document.getElementById('filterSearch').value.trim();
@@ -168,7 +287,12 @@ function renderBillsContainer(container) {
         document.getElementById('filterEndDate').value = '';
         document.getElementById('filterMinAmount').value = '';
         document.getElementById('filterMaxAmount').value = '';
-        currentFilter = { search: '', category: '', start_date: '', end_date: '', min_amount: '', max_amount: '' };
+        currentFilter = { search: '', category: '', start_date: '', end_date: '', min_amount: '', max_amount: '', workspace_scope: 'all' };
+        if (scopeContainer) {
+            scopeContainer.querySelectorAll('.workspace-seg-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-scope') === 'all'));
+            const helper = document.getElementById('billsScopeHelper');
+            if (helper) helper.textContent = 'Showing all personal & business expenses';
+        }
         fetchAndRenderBills();
     };
 
@@ -213,22 +337,51 @@ async function fetchAndRenderBills() {
     if (currentFilter.max_amount) queryParams.set('max_amount', currentFilter.max_amount);
 
     try {
-        const data = await apiRequest('/api/bills?' + queryParams.toString());
-        const bills = data.bills || [];
+        let bills = [];
+        const fbUser = getCurrentFirebaseUser();
+        if (fbUser && fbUser.uid) {
+            const allFbBills = await getBillsFromFirestore(fbUser.uid);
+            firestoreBillsCache = allFbBills;
+            bills = allFbBills.filter(b => {
+                if (currentFilter.search) {
+                    const s = currentFilter.search.toLowerCase();
+                    const m = (b.merchant_name || '').toLowerCase();
+                    const num = (b.bill_number || '').toLowerCase();
+                    if (!m.includes(s) && !num.includes(s)) return false;
+                }
+                if (currentFilter.category && b.category_name !== currentFilter.category) return false;
+                if (currentFilter.start_date && (b.bill_date || '') < currentFilter.start_date) return false;
+                if (currentFilter.end_date && (b.bill_date || '') > currentFilter.end_date) return false;
+                const amt = Number(b.grand_total || 0);
+                if (currentFilter.min_amount && amt < Number(currentFilter.min_amount)) return false;
+                if (currentFilter.max_amount && amt > Number(currentFilter.max_amount)) return false;
+                return true;
+            });
+        } else {
+            const data = await apiRequest('/api/bills?' + queryParams.toString());
+            bills = data.bills || [];
+            firestoreBillsCache = bills;
+        }
+
+        // Apply Workspace Scope Filter (All / Personal / Business)
+        const displayedBills = bills.filter(b => {
+            if (currentFilter.workspace_scope === 'all') return true;
+            return getBillWorkspaceScope(b) === currentFilter.workspace_scope;
+        });
 
         if (countBadge) {
-            const countNum = data.total_count || bills.length;
+            const countNum = displayedBills.length;
             countBadge.textContent = `${countNum} ${countNum === 1 ? 'bill' : 'bills'} found`;
         }
 
-        if (bills.length === 0) {
+        if (displayedBills.length === 0) {
             const emptyHtml = `
                 <div style="padding: 3rem 1rem; text-align: center; color: var(--color-text-muted);">
                     <div style="margin-bottom: 0.75rem; color: var(--color-primary); display: flex; justify-content: center;">
                         ${getIcon('receipt', { size: 36 })}
                     </div>
                     <div style="font-weight: 600; font-size: 1.1rem; color: var(--color-text);">No bills found</div>
-                    <p style="margin: 0.35rem 0 1.25rem; font-size: 0.85rem;">Upload a receipt in chat or load demo data from Settings.</p>
+                    <p style="margin: 0.35rem 0 1.25rem; font-size: 0.85rem;">Upload a receipt in chat or adjust your filters above.</p>
                     <button class="btn btn-primary" onclick="window.switchTab('screenChat')" type="button" style="display: inline-flex; align-items: center; gap: 0.35rem; margin: 0 auto;">
                         ${getIcon('message-square', { size: 14 })} Go to Chat
                     </button>
@@ -239,13 +392,23 @@ async function fetchAndRenderBills() {
             return;
         }
 
-        // Render Desktop Rows
-        tbody.innerHTML = bills.map(b => `
+        // Render Desktop Rows with Badges
+        tbody.innerHTML = displayedBills.map(b => {
+            const scope = getBillWorkspaceScope(b);
+            const isBiz = scope === 'business';
+            const scopeBadge = `<span class="badge-tag ${isBiz ? 'badge-tag-business' : 'badge-tag-personal'}" title="${isBiz ? 'Business Invoice' : 'Personal Expense'}">${isBiz ? '🏢 Business' : '👤 Personal'}</span>`;
+            const gstBadge = Number(b.tax_amount || 0) > 0 ? `<span class="badge-tag badge-tag-gst" title="GST Tax: ₹${Number(b.tax_amount).toFixed(2)}">GST</span>` : '';
+
+            return `
             <tr style="cursor: pointer; transition: background-color 0.1s;" class="bill-row" data-id="${b.id}">
                 <td style="padding: 0.75rem 1rem; color: var(--color-text-muted); font-size: 0.85rem;">${formatDate(b.bill_date)}</td>
                 <td style="padding: 0.75rem 1rem; font-weight: 600; color: var(--color-text);">
-                    ${escapeHtml(b.merchant_name)}
-                    ${b.categories_summary ? `<div style="font-size:0.75rem; color:var(--color-text-subtle);">${escapeHtml(b.categories_summary)}</div>` : ''}
+                    <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+                        <span>${escapeHtml(b.merchant_name)}</span>
+                        ${scopeBadge}
+                        ${gstBadge}
+                    </div>
+                    ${b.categories_summary ? `<div style="font-size:0.75rem; color:var(--color-text-subtle); margin-top: 0.2rem;">${escapeHtml(b.categories_summary)}</div>` : ''}
                 </td>
                 <td style="padding: 0.75rem 1rem; font-size: 0.85rem; color: var(--color-text-muted);">${escapeHtml(b.bill_number || '—')}</td>
                 <td style="padding: 0.75rem 1rem; font-size: 0.85rem;"><span style="background:var(--color-surface-raised); padding:0.2rem 0.5rem; border-radius:4px; border:1px solid var(--color-border);">${escapeHtml(b.payment_method || 'Not stated')}</span></td>
@@ -259,15 +422,26 @@ async function fetchAndRenderBills() {
                     </button>
                 </td>
             </tr>
-        `).join('');
+        `;
+        }).join('');
 
-        // Render Mobile Cards
+        // Render Mobile Cards with Badges
         if (mobileCards) {
-            mobileCards.innerHTML = bills.map(b => `
+            mobileCards.innerHTML = displayedBills.map(b => {
+                const scope = getBillWorkspaceScope(b);
+                const isBiz = scope === 'business';
+                const scopeBadge = `<span class="badge-tag ${isBiz ? 'badge-tag-business' : 'badge-tag-personal'}">${isBiz ? '🏢 Business' : '👤 Personal'}</span>`;
+                const gstBadge = Number(b.tax_amount || 0) > 0 ? `<span class="badge-tag badge-tag-gst">GST</span>` : '';
+
+                return `
                 <div class="bill-mobile-card bill-row" data-id="${b.id}" style="background: var(--color-surface-card); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 1rem; cursor: pointer; display: flex; flex-direction: column; gap: 0.6rem; box-shadow: var(--shadow-sm);">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem;">
                         <div>
-                            <div style="font-weight: 700; font-size: 1rem; color: var(--color-text);">${escapeHtml(b.merchant_name)}</div>
+                            <div style="font-weight: 700; font-size: 1rem; color: var(--color-text); display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
+                                <span>${escapeHtml(b.merchant_name)}</span>
+                                ${scopeBadge}
+                                ${gstBadge}
+                            </div>
                             <div style="font-size: 0.78rem; color: var(--color-text-muted); margin-top: 0.15rem;">${formatDate(b.bill_date)} ${b.bill_number ? `• #${escapeHtml(b.bill_number)}` : ''}</div>
                         </div>
                         <div style="text-align: right;">
@@ -286,7 +460,8 @@ async function fetchAndRenderBills() {
                         </button>
                     </div>
                 </div>
-            `).join('');
+            `;
+            }).join('');
         }
 
         // Attach click listeners to rows & view buttons on both desktop and mobile
@@ -323,9 +498,17 @@ export async function openBillDetailModal(billId) {
     document.body.classList.add('modal-open');
 
     try {
-        const data = await apiRequest(`/api/bills/detail?id=${billId}`);
-        const bill = data.bill;
-        const items = data.items || [];
+        let bill = null;
+        let items = [];
+        const cached = firestoreBillsCache.find(b => String(b.id) === String(billId));
+        if (cached) {
+            bill = cached;
+            items = cached.line_items || [];
+        } else {
+            const data = await apiRequest(`/api/bills/detail?id=${billId}`);
+            bill = data.bill;
+            items = data.items || [];
+        }
 
         title.textContent = `${bill.merchant_name} (${formatDate(bill.bill_date)})`;
 
@@ -398,7 +581,19 @@ export async function openBillDetailModal(billId) {
             </div>
         `;
 
+        const currentScope = getBillWorkspaceScope(bill);
+        const classificationBar = `
+            <div style="display: flex; align-items: center; justify-content: space-between; background: var(--color-surface-bg); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 0.6rem 0.85rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+                <span style="font-size: 0.82rem; font-weight: 600; color: var(--color-text-muted);">Workspace Classification:</span>
+                <div class="workspace-segmented-control" id="modalBillScopeControl">
+                    <button type="button" class="workspace-seg-btn ${currentScope === 'personal' ? 'active' : ''}" data-scope="personal">👤 Personal Expense</button>
+                    <button type="button" class="workspace-seg-btn ${currentScope === 'business' ? 'active' : ''}" data-scope="business">🏢 Business / Commercial</button>
+                </div>
+            </div>
+        `;
+
         body.innerHTML = `
+            ${classificationBar}
             ${attachmentHtml}
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem; background: var(--color-surface-bg); padding: 0.75rem; border-radius: var(--radius-md); border: 1px solid var(--color-border); margin-bottom: 1rem; font-size: 0.85rem;">
                 <div><span style="color:var(--color-text-muted);">Invoice #:</span> <strong>${escapeHtml(bill.bill_number || 'N/A')}</strong></div>
@@ -409,6 +604,19 @@ export async function openBillDetailModal(billId) {
             </div>
             ${itemsHtml}
         `;
+
+        // Classification Switcher in Modal
+        const modalScopeBtns = body.querySelectorAll('#modalBillScopeControl .workspace-seg-btn');
+        modalScopeBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const newScope = btn.getAttribute('data-scope');
+                localStorage.setItem('spendsense_bill_scope_' + bill.id, newScope);
+                modalScopeBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                showToast(`Classified as ${newScope === 'business' ? 'Business / Commercial' : 'Personal'}`, 'success', 2000);
+                fetchAndRenderBills();
+            });
+        });
 
         // Save Splits Listener
         const btnSaveSplits = document.getElementById('btnSaveDetailSplits');
@@ -438,6 +646,17 @@ export async function openBillDetailModal(billId) {
                     btnSaveSplits.disabled = false;
                     btnSaveSplits.innerHTML = `${getIcon('check', { size: 13 })} Saved!`;
                     const updatedShare = Number(splitRes.my_share_total ?? bill.grand_total);
+                    
+                    // Sync numerical share to Firestore
+                    const fbUser = getCurrentFirebaseUser();
+                    if (fbUser && fbUser.uid && bill.id) {
+                        try {
+                            await updateBillSplitsInFirestore(fbUser.uid, bill.id, updatedShare);
+                        } catch (fErr) {
+                            console.warn('Firestore bill split update note:', fErr);
+                        }
+                    }
+
                     const myShareValEl = document.getElementById('modalMyShareVal');
                     if (myShareValEl) {
                         myShareValEl.textContent = formatCurrency(updatedShare);
@@ -468,10 +687,17 @@ export async function openBillDetailModal(billId) {
             if (!confirmed) return;
 
             try {
-                await apiRequest('/api/bills/delete', {
-                    method: 'POST',
-                    body: JSON.stringify({ bill_id: bill.id }),
-                });
+                const fbUser = getCurrentFirebaseUser();
+                if (fbUser && fbUser.uid) {
+                    await deleteBillFromFirestore(fbUser.uid, bill.id);
+                }
+                try {
+                    await apiRequest('/api/bills/delete', {
+                        method: 'POST',
+                        body: JSON.stringify({ bill_id: bill.id }),
+                    });
+                } catch (_) {}
+
                 modal.classList.remove('open');
                 showToast('Bill deleted successfully.', 'success');
                 fetchAndRenderBills();

@@ -9,6 +9,8 @@ import { openEditModal } from './bill-modal.js';
 import { appendAssistantMessage, appendInsightMessage } from './chat.js';
 import { setUploadLimit } from './auth.js';
 import { getIcon } from './icons.js';
+import { getCurrentFirebaseUser } from './firebase-auth.js';
+import { saveBillToFirestore } from './firebase-firestore.js';
 
 export function renderBillCard(draftData, containerElement) {
     const card = document.createElement('div');
@@ -94,6 +96,28 @@ export function renderBillCard(draftData, containerElement) {
                     </div>
                 ` : ''}
             </div>
+        </div>
+    `;
+
+    const activeAppMode = (localStorage.getItem('spendsense_active_mode') === 'business') ? 'business' : 'personal';
+    const hasTaxBreakdown = Number(draftData.tax_amount || 0) > 0 || (draftData.line_items || []).some(it => Number(it.tax_percent || 0) > 0);
+    const isWholesaleMerchant = (draftData.merchant_type === 'wholesale') || /traders|enterprises|wholesal|distributor|supplies|corp|pvt\s+ltd|limited/i.test(merchantName);
+
+    if (!draftData.scope) {
+        draftData.scope = (activeAppMode === 'business' || isWholesaleMerchant) ? 'business' : 'personal';
+    }
+    const isBizScope = draftData.scope === 'business';
+
+    const scopeBadgeHtml = `
+        <div class="bill-scope-bar" style="margin: 0.6rem 0; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; background: ${isBizScope ? 'rgba(1, 142, 239, 0.08)' : 'rgba(16, 185, 129, 0.08)'}; border: 1px solid ${isBizScope ? 'rgba(1, 142, 239, 0.25)' : 'rgba(16, 185, 129, 0.25)'}; border-radius: var(--radius-sm); padding: 0.35rem 0.65rem;">
+            <div style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; font-weight: 600; color: ${isBizScope ? 'var(--color-primary)' : 'var(--color-success)'};">
+                <span style="display: flex;">${getIcon(isBizScope ? 'briefcase' : 'user', { size: 13 })}</span>
+                <span>${isBizScope ? 'Business / Commercial Invoice' : 'Personal Household Bill'}</span>
+                ${hasTaxBreakdown ? `<span style="font-size: 0.68rem; font-weight: 700; background: rgba(1, 142, 239, 0.15); color: #018EEF; border: 1px solid rgba(1, 142, 239, 0.3); padding: 0.05rem 0.35rem; border-radius: 4px;">GST / ITC</span>` : ''}
+            </div>
+            <button type="button" class="btn-toggle-bill-scope" style="background: transparent; border: none; font-size: 0.75rem; color: var(--color-primary); cursor: pointer; text-decoration: underline; padding: 0.1rem 0.3rem;">
+                Switch to ${isBizScope ? '👤 Personal' : '🏢 Business'}
+            </button>
         </div>
     `;
 
@@ -216,7 +240,15 @@ export function renderBillCard(draftData, containerElement) {
         </div>
     `;
 
-    card.innerHTML = headerHtml + warningsHtml + breakdownHtml + itemsHtml + actionsHtml;
+    card.innerHTML = headerHtml + scopeBadgeHtml + warningsHtml + breakdownHtml + itemsHtml + actionsHtml;
+
+    // Attach Scope Toggle Listener
+    card.querySelector('.btn-toggle-bill-scope')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        draftData.scope = (draftData.scope === 'business') ? 'personal' : 'business';
+        const updatedCard = renderBillCard(draftData, null);
+        card.replaceWith(updatedCard);
+    });
 
     // Attach Split Toggle Listeners
     card.querySelectorAll('.btn-split-toggle').forEach(btn => {
@@ -299,6 +331,42 @@ async function handleSaveBill(billData, cardElement) {
                 original_gemini: billData, // for accuracy log comparison
             }),
         });
+
+        // Persist workspace scope classification for this bill
+        const savedBillId = response.bill_id || billData.id;
+        if (savedBillId && billData.scope) {
+            try {
+                localStorage.setItem('spendsense_bill_scope_' + savedBillId, billData.scope);
+            } catch (e) {
+                console.warn('Scope persist note:', e);
+            }
+        }
+
+        // For business invoices, offer Net-30 accounts payable reminder if none present
+        if (billData.scope === 'business') {
+            if (!response.suggested_reminders) response.suggested_reminders = [];
+            const hasDueRem = response.suggested_reminders.some(r => r.type === 'bill_due');
+            if (!hasDueRem) {
+                const bDate = billData.bill_date ? new Date(billData.bill_date) : new Date();
+                bDate.setDate(bDate.getDate() + 30);
+                response.suggested_reminders.push({
+                    title: `Supplier Payment: ${billData.merchant_name || 'Vendor'}`,
+                    type: 'bill_due',
+                    due_date: bDate.toISOString().split('T')[0],
+                    notes: `Accounts payable invoice payment (Net-30 days)`
+                });
+            }
+        }
+
+        // Also save to Cloud Firestore for user
+        try {
+            const firebaseUser = getCurrentFirebaseUser();
+            if (firebaseUser && firebaseUser.uid) {
+                await saveBillToFirestore(firebaseUser.uid, billData);
+            }
+        } catch (fErr) {
+            console.warn('Firestore bill save note:', fErr);
+        }
 
         // Update actions bar to show confirmed status and suggested reminders
         const actionsBar = cardElement.querySelector('.bill-card-actions');

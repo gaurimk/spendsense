@@ -7,6 +7,8 @@
 import { apiRequest } from './api.js';
 import { formatDate, escapeHtml, showToast, showConfirmModal } from './utils.js';
 import { getIcon } from './icons.js';
+import { getCurrentFirebaseUser } from './firebase-auth.js';
+import { getRemindersFromFirestore, saveReminderToFirestore, updateReminderInFirestore, toggleReminderInFirestore, deleteReminderFromFirestore } from './firebase-firestore.js';
 
 let activeFilter = 'all';
 let cachedReminders = { upcoming: [], overdue: [], completed: [], reminders: [] };
@@ -15,6 +17,9 @@ export async function loadRemindersTab() {
     const container = document.getElementById('screenReminders');
     if (!container) return;
 
+    const activeMode = localStorage.getItem('spendsense_active_mode') || 'personal';
+    const isBiz = activeMode === 'business';
+
     container.innerHTML = `
         <div style="max-width: 950px; margin: 0 auto; width: 100%; padding: 1.25rem;">
             <!-- Header -->
@@ -22,14 +27,14 @@ export async function loadRemindersTab() {
                 <div>
                     <h2 style="font-size: 1.4rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
                         <span style="color: var(--color-warning); display: flex;">${getIcon('bell', { size: 22 })}</span>
-                        Warranty & Return Reminders
+                        ${isBiz ? 'Commercial Payables & Compliance Deadlines' : 'Warranty & Return Reminders'}
                     </h2>
                     <p style="color: var(--color-text-muted); font-size: 0.88rem; margin-top: 0.2rem;">
-                        Track gadget warranties, apparel exchange windows, and upcoming bills.
+                        ${isBiz ? 'Track Net-30 supplier invoice payment deadlines, warranties, and GST tax return due dates' : 'Track gadget warranties, apparel exchange windows, and upcoming bills.'}
                     </p>
                 </div>
                 <button id="remBtnAddReminder" class="btn btn-primary" type="button" style="display: inline-flex; align-items: center; gap: 0.35rem;">
-                    ${getIcon('plus', { size: 14 })} Add Reminder
+                    ${getIcon('plus', { size: 14 })} ${isBiz ? 'Add Payable / Reminder' : 'Add Reminder'}
                 </button>
             </div>
 
@@ -89,9 +94,10 @@ export async function loadRemindersTab() {
                         <div class="form-group" style="margin-bottom: 0.85rem;">
                             <label class="form-label">Type *</label>
                             <select id="remInputType" class="form-control">
+                                <option value="bill_due">Supplier Invoice Due / Net-30 Payable</option>
+                                <option value="gst_filing">GST Tax Filing Deadline (GSTR-3B / 1)</option>
                                 <option value="warranty">Warranty Coverage</option>
                                 <option value="return_deadline">Return / Exchange Window</option>
-                                <option value="bill_due">Bill Due / Subscription</option>
                                 <option value="other">Other Reminder</option>
                             </select>
                         </div>
@@ -142,6 +148,16 @@ export async function loadRemindersTab() {
     });
 
     await fetchAndRenderReminders();
+
+    if (!container.dataset.modeListenerAttached) {
+        container.dataset.modeListenerAttached = 'true';
+        window.addEventListener('modechanged', () => {
+            const activeScreen = document.querySelector('.screen-view.active');
+            if (activeScreen && activeScreen.id === 'screenReminders') {
+                loadRemindersTab();
+            }
+        });
+    }
 }
 
 async function fetchAndRenderReminders() {
@@ -155,7 +171,42 @@ async function fetchAndRenderReminders() {
     }
 
     try {
-        const data = await apiRequest('/api/reminders');
+        let data = null;
+        const fbUser = getCurrentFirebaseUser();
+        if (fbUser && fbUser.uid) {
+            const list = await getRemindersFromFirestore(fbUser.uid);
+            const todayStr = new Date().toISOString().split('T')[0];
+            const upcoming = [];
+            const overdue = [];
+            const completed = [];
+            const dueSoon = [];
+
+            list.forEach(r => {
+                const dueDate = r.due_date || todayStr;
+                const daysDiff = Math.ceil((new Date(dueDate) - new Date(todayStr)) / (1000 * 60 * 60 * 24));
+                r.days_remaining = daysDiff;
+
+                if (r.is_completed) {
+                    completed.push(r);
+                } else if (daysDiff < 0) {
+                    overdue.push(r);
+                    dueSoon.push(r);
+                } else {
+                    upcoming.push(r);
+                    if (daysDiff <= 7) dueSoon.push(r);
+                }
+            });
+
+            data = {
+                reminders: list,
+                upcoming: upcoming,
+                overdue: overdue,
+                completed: completed,
+                due_soon: dueSoon
+            };
+        } else {
+            data = await apiRequest('/api/reminders');
+        }
         cachedReminders = data;
 
         // Update counts
@@ -323,10 +374,16 @@ function createReminderCard(rem) {
     // Toggle checkbox
     card.querySelector('.rem-toggle-checkbox')?.addEventListener('change', async (e) => {
         try {
-            await apiRequest('/api/reminders/toggle', {
-                method: 'POST',
-                body: { id: rem.id, is_completed: e.target.checked },
-            });
+            const fbUser = getCurrentFirebaseUser();
+            if (fbUser && fbUser.uid) {
+                await toggleReminderInFirestore(fbUser.uid, rem.id, e.target.checked);
+            }
+            try {
+                await apiRequest('/api/reminders/toggle', {
+                    method: 'POST',
+                    body: { id: rem.id, is_completed: e.target.checked },
+                });
+            } catch (_) {}
             showToast('Reminder status updated', 'info', 1500);
             await fetchAndRenderReminders();
         } catch (err) {
@@ -345,10 +402,16 @@ function createReminderCard(rem) {
         const confirmed = await showConfirmModal(`Delete reminder "${rem.title}"?`, 'Delete Reminder');
         if (confirmed) {
             try {
-                await apiRequest('/api/reminders/delete', {
-                    method: 'POST',
-                    body: { id: rem.id },
-                });
+                const fbUser = getCurrentFirebaseUser();
+                if (fbUser && fbUser.uid) {
+                    await deleteReminderFromFirestore(fbUser.uid, rem.id);
+                }
+                try {
+                    await apiRequest('/api/reminders/delete', {
+                        method: 'POST',
+                        body: { id: rem.id },
+                    });
+                } catch (_) {}
                 showToast('Reminder deleted', 'success');
                 await fetchAndRenderReminders();
             } catch (err) {
@@ -420,25 +483,46 @@ async function saveReminderForm() {
     }
 
     try {
-        if (id) {
-            await apiRequest('/api/reminders/update', {
-                method: 'POST',
-                body: { id: Number(id), title, reminder_type: type, due_date: dueDate, notes },
-            });
-            showToast('Reminder updated', 'success');
-        } else {
-            await apiRequest('/api/reminders', {
-                method: 'POST',
-                body: { title, reminder_type: type, due_date: dueDate, notes, bill_id: billId ? Number(billId) : null },
-            });
-            showToast('Reminder created', 'success');
+        const fbUser = getCurrentFirebaseUser();
+        if (fbUser && fbUser.uid) {
+            if (id) {
+                await updateReminderInFirestore(fbUser.uid, id, {
+                    title,
+                    reminder_type: type,
+                    due_date: dueDate,
+                    notes,
+                    bill_id: billId || null
+                });
+            } else {
+                await saveReminderToFirestore(fbUser.uid, {
+                    title,
+                    reminder_type: type,
+                    due_date: dueDate,
+                    notes,
+                    bill_id: billId || null,
+                    is_completed: false
+                });
+            }
         }
-
+        try {
+            if (id) {
+                await apiRequest('/api/reminders/update', {
+                    method: 'POST',
+                    body: { id: Number(id), title, reminder_type: type, due_date: dueDate, notes },
+                });
+            } else {
+                await apiRequest('/api/reminders', {
+                    method: 'POST',
+                    body: { title, reminder_type: type, due_date: dueDate, notes, bill_id: billId ? Number(billId) : null },
+                });
+            }
+        } catch (_) {}
+        showToast(id ? 'Reminder updated' : 'Reminder created', 'success');
         closeReminderModal();
         await fetchAndRenderReminders();
-    } catch (e) {
+    } catch (err) {
         if (errorEl) {
-            errorEl.textContent = e.message || 'Failed to save reminder.';
+            errorEl.textContent = err.message || 'Failed to save reminder.';
             errorEl.style.display = 'block';
         }
     }

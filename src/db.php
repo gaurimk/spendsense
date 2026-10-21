@@ -225,6 +225,12 @@ SQL;
 
     // Auto-migration: ensure document_type and legibility columns exist in existing DB
     try {
+        $userCols = $pdo->query("PRAGMA table_info(users);")->fetchAll(PDO::FETCH_COLUMN, 1);
+        if (!in_array('firebase_uid', $userCols, true)) {
+            $pdo->exec("ALTER TABLE users ADD COLUMN firebase_uid TEXT DEFAULT NULL;");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_users_firebase_uid ON users(firebase_uid);");
+        }
+
         $billCols = $pdo->query("PRAGMA table_info(bills);")->fetchAll(PDO::FETCH_COLUMN, 1);
         if (!in_array('document_type', $billCols, true)) {
             $pdo->exec("ALTER TABLE bills ADD COLUMN document_type TEXT DEFAULT 'printed';");

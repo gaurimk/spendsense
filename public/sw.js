@@ -4,13 +4,15 @@
  * API requests always bypass the cache for real-time accuracy.
  */
 
-const CACHE_NAME = 'spendsense-v1';
+const CACHE_NAME = 'spendsense-v2';
 const STATIC_ASSETS = [
     '/',
     '/manifest.json',
     '/css/style.css',
     '/icons/icon-192.svg',
     '/icons/icon-512.svg',
+    '/js/icons.js',
+    '/js/utils.js',
     '/js/api.js',
     '/js/app.js',
     '/js/auth.js',
@@ -23,7 +25,11 @@ const STATIC_ASSETS = [
     '/js/insights.js',
     '/js/price-tracker.js',
     '/js/reminders.js',
-    '/js/settings.js'
+    '/js/settings.js',
+    '/js/firebase-config.js',
+    '/js/firebase-auth.js',
+    '/js/firebase-firestore.js',
+    '/js/firebase-storage.js'
 ];
 
 self.addEventListener('install', (event) => {
@@ -52,6 +58,24 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
+    // Network-first for navigation requests (HTML) to ensure fresh app shell
+    if (event.request.mode === 'navigate') {
+        event.respondWith(
+            fetch(event.request).then((networkResponse) => {
+                if (networkResponse && networkResponse.status === 200) {
+                    const responseClone = networkResponse.clone();
+                    caches.open(CACHE_NAME).then((cache) => {
+                        cache.put(event.request, responseClone);
+                    });
+                }
+                return networkResponse;
+            }).catch(() => {
+                return caches.match('/');
+            })
+        );
+        return;
+    }
+
     // Stale-while-revalidate for static assets
     event.respondWith(
         caches.match(event.request).then((cachedResponse) => {
@@ -64,10 +88,8 @@ self.addEventListener('fetch', (event) => {
                 }
                 return networkResponse;
             }).catch(() => {
-                // If offline and request is for page navigation, fallback to root
-                if (event.request.mode === 'navigate') {
-                    return caches.match('/');
-                }
+                // If offline and not in cache, fallback
+                return cachedResponse;
             });
 
             return cachedResponse || fetchPromise;

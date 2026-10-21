@@ -455,6 +455,7 @@ function query_budget_status(
     $stmt = $pdo->prepare("
         SELECT 
             b.id AS budget_id,
+            b.month,
             c.id AS category_id,
             c.name AS category_name,
             c.color,
@@ -463,10 +464,20 @@ function query_budget_status(
         JOIN categories c ON b.category_id = c.id
         WHERE b.user_id = ?
           AND (b.month = ? OR b.month = 'default')
-        ORDER BY c.name ASC
+        ORDER BY CASE WHEN b.month = ? THEN 0 ELSE 1 END, c.name ASC
     ");
-    $stmt->execute([$userId, $monthClean]);
-    $budgets = $stmt->fetchAll();
+    $stmt->execute([$userId, $monthClean, $monthClean]);
+    $rawBudgets = $stmt->fetchAll();
+
+    // Deduplicate by category_id so categories are not repeated
+    $dedupedBudgets = [];
+    foreach ($rawBudgets as $b) {
+        $cid = (int)$b['category_id'];
+        if (!isset($dedupedBudgets[$cid])) {
+            $dedupedBudgets[$cid] = $b;
+        }
+    }
+    $budgets = array_values($dedupedBudgets);
 
     if (empty($budgets)) {
         // Return spent by categories without budget threshold

@@ -1,0 +1,155 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users/{userId}
+    // Fields:
+    //   - email: string (required)
+    //   - full_name: string (optional, 1-100 chars)
+    //   - currency: string (optional, 3-5 chars, e.g. INR, USD)
+    //   - usage_type: string (optional, in ['personal', 'family', 'shop'])
+    //   - created_at: timestamp (optional)
+    //
+    // Subcollection: users/{userId}/bills/{billId}
+    // Fields:
+    //   - merchant_name: string (optional, max 150 chars)
+    //   - bill_date: string (optional, YYYY-MM-DD format)
+    //   - grand_total: number (required, >= 0)
+    //   - my_share_total: number (optional, >= 0)
+    //   - split_ratio: number (optional, 0.0 to 1.0)
+    //   - category_id: string (optional)
+    //   - category_name: string (optional, max 100 chars)
+    //   - payment_method: string (optional, max 50 chars)
+    //   - document_type: string (optional, in ['printed', 'handwritten', 'invoice', 'receipt', 'unknown'])
+    //   - legibility: string (optional, in ['clear', 'moderate', 'poor'])
+    //   - line_items: list (optional, max 100 items)
+    //   - file_name: string (optional, max 200 chars)
+    //   - created_at: timestamp (optional)
+    //
+    // Subcollection: users/{userId}/categories/{categoryId}
+    // Fields:
+    //   - name: string (required, 1-60 chars)
+    //   - icon: string (optional, max 50 chars)
+    //   - color: string (optional, max 30 chars)
+    //   - is_default: bool (optional)
+    //   - created_at: timestamp (optional)
+    //
+    // Subcollection: users/{userId}/budgets/{budgetId}
+    // Fields:
+    //   - category_id: string (optional)
+    //   - category_name: string (required, 1-60 chars)
+    //   - monthly_budget: number (required, >= 0)
+    //   - created_at: timestamp (optional)
+    //
+    // Subcollection: users/{userId}/reminders/{reminderId}
+    // Fields:
+    //   - bill_id: string (optional)
+    //   - title: string (required, 1-150 chars)
+    //   - reminder_type: string (required, in ['warranty', 'return', 'custom', 'subscription'])
+    //   - due_date: string (required, YYYY-MM-DD format)
+    //   - is_completed: bool (required)
+    //   - created_at: timestamp (optional)
+    //
+    // Subcollection: users/{userId}/chat_messages/{messageId}
+    // Fields:
+    //   - role: string (required, in ['user', 'assistant'])
+    //   - message: string (required, max 10000 chars)
+    //   - timestamp: timestamp (optional)
+    //
+    // ===============================================================
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.size() <= 150 && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasOnly(['email', 'full_name', 'currency', 'usage_type', 'created_at', 'updated_at']) &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
+             (!('full_name' in data) || (data.full_name is string && data.full_name.size() <= 100)) &&
+             (!('currency' in data) || (data.currency is string && data.currency.size() <= 10)) &&
+             (!('usage_type' in data) || (data.usage_type in ['personal', 'family', 'shop']));
+    }
+
+    function isValidBill(data) {
+      return (!('grand_total' in data) || (data.grand_total is number && data.grand_total >= 0)) &&
+             (!('my_share_total' in data) || (data.my_share_total is number && data.my_share_total >= 0)) &&
+             (!('merchant_name' in data) || data.merchant_name == null || (data.merchant_name is string && data.merchant_name.size() <= 200)) &&
+             (!('category_name' in data) || (data.category_name is string && data.category_name.size() <= 100)) &&
+             (!('storage_url' in data) || (data.storage_url is string && data.storage_url.size() <= 1000)) &&
+             (!('storage_path' in data) || (data.storage_path is string && data.storage_path.size() <= 500)) &&
+             (!('line_items' in data) || (data.line_items is list && data.line_items.size() <= 100));
+    }
+
+    function isValidCategory(data) {
+      return (!('name' in data) || (data.name is string && data.name.size() > 0 && data.name.size() <= 80));
+    }
+
+    function isValidBudget(data) {
+      return (!('monthly_budget' in data) || (data.monthly_budget is number && data.monthly_budget >= 0)) &&
+             (!('category_name' in data) || (data.category_name is string && data.category_name.size() <= 80));
+    }
+
+    function isValidReminder(data) {
+      return (!('title' in data) || (data.title is string && data.title.size() > 0 && data.title.size() <= 200)) &&
+             (!('is_completed' in data) || data.is_completed is bool);
+    }
+
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // User Profile Document
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data);
+      allow delete: if isOwner(userId);
+
+      // Bills subcollection
+      match /bills/{billId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidBill(request.resource.data);
+        allow update: if isOwner(userId) && isValidBill(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      // Categories subcollection
+      match /categories/{categoryId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidCategory(request.resource.data);
+        allow update: if isOwner(userId) && isValidCategory(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      // Budgets subcollection
+      match /budgets/{budgetId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidBudget(request.resource.data);
+        allow update: if isOwner(userId) && isValidBudget(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      // Reminders subcollection
+      match /reminders/{reminderId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidReminder(request.resource.data);
+        allow update: if isOwner(userId) && isValidReminder(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+    }
+  }
+}

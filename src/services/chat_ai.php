@@ -242,13 +242,96 @@ function execute_whitelisted_function(
 }
 
 /**
+ * Generates dynamic, contextual follow-up questions to keep the conversation flowing smoothly.
+ */
+function get_contextual_followups(string $funcName, array $data = [], string $mode = 'personal'): array {
+    if ($mode === 'business' || $mode === 'shop') {
+        switch ($funcName) {
+            case 'get_spend_summary':
+                return [
+                    'Check GST Input Tax Credit (ITC)',
+                    'Who are my top wholesale suppliers?',
+                ];
+            case 'compare_periods':
+                return [
+                    'Which procurement category increased most?',
+                    'Compare wholesale distributor rates',
+                ];
+            case 'list_bills':
+                return [
+                    'Show biggest supplier invoice',
+                    'View unpaid supplier payables',
+                ];
+            default:
+                return [];
+        }
+    }
+
+    switch ($funcName) {
+        case 'get_spend_summary':
+            return [
+                'Compare spending with last month',
+                'Am I on track with my monthly budget?',
+            ];
+        case 'compare_periods':
+            return [
+                'Which category increased the most?',
+                'Show my 5 biggest bills',
+            ];
+        case 'top_items':
+            return [
+                'Which supermarket has the lowest prices?',
+                'What are my recurring monthly expenses?',
+            ];
+        case 'price_history':
+            return [
+                'Which store is cheapest overall?',
+                'Show recent grocery bills',
+            ];
+        case 'budget_status':
+            return [
+                'Show categories exceeding budget',
+                'Compare spending with last month',
+            ];
+        case 'recurring_spend':
+            return [
+                'Cheapest store for recurring items',
+                'Check warranty and return deadlines',
+            ];
+        case 'list_reminders':
+            return [
+                'Show deadlines due within 7 days',
+                'Upload a new receipt',
+            ];
+        case 'list_bills':
+            return [
+                'Where did I spend the most this month?',
+                'Compare spending with last month',
+            ];
+        default:
+            return [];
+    }
+}
+
+/**
+ * Strips all Unicode emojis, pictographs, and casual symbols to maintain professional corporate text.
+ */
+function strip_emojis(string $text): string {
+    $pattern = '/[\x{1F300}-\x{1F5FF}\x{1F600}-\x{1F64F}\x{1F680}-\x{1F6FF}\x{1F700}-\x{1F77F}\x{1F780}-\x{1F7FF}\x{1F800}-\x{1F8FF}\x{1F900}-\x{1F9FF}\x{1FA00}-\x{1FA6F}\x{1FA70}-\x{1FAFF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{2300}-\x{23FF}\x{2B50}\x{200D}\x{FE0E}\x{FE0F}]/u';
+    $clean = preg_replace($pattern, '', $text);
+    $clean = preg_replace('/[ \t]{2,}/', ' ', $clean);
+    return trim($clean);
+}
+
+/**
  * Main function: Chat with user's financial data using Gemini function calling.
  */
 function answer_user_query_with_gemini(
     PDO $pdo,
     int $userId,
     string $userQuestion,
-    string $preferredCurrency = 'INR'
+    string $preferredCurrency = 'INR',
+    string $mode = 'personal'
 ): array {
     $userQuestion = trim($userQuestion);
     if ($userQuestion === '') {
@@ -256,26 +339,39 @@ function answer_user_query_with_gemini(
     }
 
     $systemInstruction = <<<SYS
-You are SpendSense, an intelligent and friendly expense assistant.
+You are SpendSense, an articulate, highly competent, professional financial intelligence analyst and expense management assistant.
 The current date is October 2026.
-You help the user understand their spending habits by using tool functions to query their real recorded bills.
-CRITICAL RULES:
-1. Always call the appropriate tool function to get accurate data. NEVER invent numbers, dates, or merchants.
-2. Format currency amounts in {$preferredCurrency} (₹).
-3. Be concise, direct, and conversational.
-4. If the user asks for comparison or biggest bills, highlight the key takeaway first.
-5. If the query returns a list or breakdown, summarize it cleanly.
-6. JUDGEMENT QUESTIONS: When the user asks a judgement question like "am I spending a lot?", "am I spending too much?", "is my spending high?", or "how am I doing financially?":
-   - Compare this month with last month (call compare_periods) and check category budgets (call budget_status).
+Your communication style is polished, objective, concise, and professional.
+
+STRICT TONE AND FORMATTING RULES:
+1. NEVER USE ANY EMOJIS UNDER ANY CIRCUMSTANCES. No smileys, symbols, or pictograms. Ensure all text looks human, professional, and corporate.
+2. Maintain a professional, executive advisory tone. Write clear, well-structured, grammatical sentences.
+3. Always retrieve accurate data by calling the appropriate tool function. Never fabricate numbers, dates, or merchants.
+4. Format all currency amounts with {$preferredCurrency} (₹).
+5. Present financial observations clearly and concisely. Highlight variance, budget limits, and key trends objectively.
+6. When greeting or introducing yourself, be professional and concise: "Welcome to SpendSense. I can assist you in analyzing your bills, tracking category budgets, monitoring store prices, and reviewing recurring expenses. How may I assist you today?"
+7. When closing an answer, offer a brief, relevant follow-up inquiry without hype (e.g. "Would you like to examine category breakdown details or compare these figures with your previous month?").
+8. JUDGEMENT QUESTIONS: When the user asks "am I spending a lot?", "am I spending too much?", "is my spending high?", or "how am I doing financially?":
+   - Compare this month with last month (call compare_periods) and review category budgets (call budget_status).
    - If the user has fewer than 2 months of history or only 1-2 bills recorded, state clearly: "You don't have enough spending history recorded yet to evaluate whether you are spending a lot compared to your normal habits. So far this month, you have recorded [X bill/bills] totaling ₹[Y]."
-   - If there is history, benchmark this month's spending against last month and against category budgets, clearly stating the increase/decrease and any budget alerts.
+   - If history exists, benchmark current spend against previous periods and budget limits, stating numerical deltas and budget limit notifications clearly.
 SYS;
+
+    if ($mode === 'business' || $mode === 'shop') {
+        $systemInstruction .= "\n\nCOMMERCIAL WORKSPACE CONTEXT:\n"
+            . "- You are operating in Commercial / Business Mode as an enterprise procurement and business accounting analyst.\n"
+            . "- Treat expenses as commercial invoices, vendor disbursements, inventory procurement, and operating overhead.\n"
+            . "- Refer to merchants as Suppliers, Vendors, or Distributors as appropriate.\n"
+            . "- Highlight GST subtotal taxable values, Input Tax Credit (ITC) eligibility, and vendor unit price variances objectively.\n"
+            . "- Track supplier credit terms (Net-15/30) and pending payable obligations professionally.\n"
+            . "- STRICTLY DO NOT USE ANY EMOJIS.";
+    }
 
     // Check if key is configured
     $apiKey = trim((string)GEMINI_API_KEY);
     if ($apiKey === '' || $apiKey === 'your_gemini_api_key_here') {
         // Run fallback query handler
-        return answer_user_query_fallback($pdo, $userId, $userQuestion, $preferredCurrency);
+        return answer_user_query_fallback($pdo, $userId, $userQuestion, $preferredCurrency, $mode);
     }
 
     $tools = get_gemini_tools_declaration();
@@ -327,9 +423,14 @@ SYS;
 
         // If Gemini did not call a function, return its direct answer
         if (!$functionCallPart) {
+            $directClean = strip_emojis(trim($directText));
+            if ($directClean === '') {
+                $directClean = "I can assist you with your expense records, category budgets, vendor price histories, and recurring commitments. You may ask questions such as \"Where did I spend the most this month?\" or \"Show my 5 biggest bills\".";
+            }
             return [
-                'text' => trim($directText) ?: "I couldn't find specific data for that. You can ask things like \"Where did I spend the most this month?\" or \"Show my 5 biggest bills\".",
+                'text' => $directClean,
                 'function_called' => null,
+                'followups' => null,
             ];
         }
 
@@ -382,20 +483,20 @@ SYS;
         $secondResponse = call_gemini_api($secondPayload, 30);
         $finalText = $secondResponse['candidates'][0]['content']['parts'][0]['text'] ?? '';
 
-        // Generate optional visualization metadata
-        $visualization = build_visualization_metadata($funcName, $queryResult);
+        $finalClean = strip_emojis(trim($finalText));
 
         return [
-            'text' => trim($finalText),
+            'text' => $finalClean,
             'function_called' => $funcName,
             'function_args' => $funcArgs,
             'data' => $queryResult,
             'visualization' => $visualization,
+            'followups' => get_contextual_followups($funcName, $queryResult, $mode),
         ];
 
     } catch (Throwable $e) {
         // Fallback to local heuristic query parser if Gemini fails (e.g. quota, timeout, network)
-        return answer_user_query_fallback($pdo, $userId, $userQuestion, $preferredCurrency);
+        return answer_user_query_fallback($pdo, $userId, $userQuestion, $preferredCurrency, $mode);
     }
 }
 
@@ -407,27 +508,55 @@ function answer_user_query_fallback(
     PDO $pdo,
     int $userId,
     string $q,
-    string $currency = 'INR'
+    string $currency = 'INR',
+    string $mode = 'personal'
 ): array {
     $ql = strtolower($q);
+
+    // Direct greetings or help inquiries: no data query, no followups
+    if (preg_match('/^(hi|hello|hey|greetings|good\s+(morning|afternoon|evening)|who\s+are\s+you|what\s+can\s+you\s+do|help)\b/i', trim($ql))) {
+        return [
+            'text' => "Hello! I am your SpendSense financial intelligence assistant. I can assist you with your expense records, category budgets, vendor price histories, and recurring commitments.",
+            'function_called' => null,
+            'followups' => null,
+        ];
+    }
+
+    // Refusal / Security / Out of bounds queries: no followups
+    if (preg_match('/(other\s+user|rest\s+of\s+user|backend\s+storage|database\s+access|give\s+me.*access|grant.*access|show.*users|admin\s+password)/i', $ql)) {
+        return [
+            'text' => "I cannot fulfill this request. I do not have access to backend storage systems or other users' data, and I am restricted strictly to analyzing your personal expense records.",
+            'function_called' => null,
+            'followups' => null,
+        ];
+    }
 
     if (str_contains($ql, 'biggest') || str_contains($ql, 'largest') || str_contains($ql, 'highest bill')) {
         $data = query_list_bills($pdo, $userId, ['order_by' => 'total_desc', 'limit' => 5]);
         if (empty($data['bills'])) {
-            $text = "You haven't recorded any bills yet. Upload a receipt or click **Load 40 Demo Bills** to see your biggest bills.";
+            $text = "You have not recorded any bills yet. Upload a receipt or select Load 40 Demo Bills to review your largest expenditures.";
+            return [
+                'text' => $text,
+                'function_called' => 'list_bills',
+                'data' => $data,
+                'visualization' => null,
+                'followups' => null,
+            ];
         } else {
             $count = count($data['bills']);
             $label = $count === 5 ? "top 5 biggest bills" : "{$count} recorded bills";
-            $text = "Here are your {$label}:\n\n";
+            $text = "Here are your {$label} sorted by total amount:\n\n";
             foreach ($data['bills'] as $idx => $b) {
                 $text .= ($idx + 1) . ". **{$b['merchant_name']}** — ₹" . number_format((float)$b['grand_total'], 2) . " on {$b['bill_date']}\n";
             }
+            $text .= "\nWould you like to examine line items or compare these against your category budgets?";
         }
         return [
             'text' => $text,
             'function_called' => 'list_bills',
             'data' => $data,
             'visualization' => build_visualization_metadata('list_bills', $data),
+            'followups' => get_contextual_followups('list_bills', $data, $mode),
         ];
     }
 
@@ -439,7 +568,7 @@ function answer_user_query_fallback(
         $trend = $data['difference']['trend'];
         $pct = $data['difference']['percent_change'];
 
-        $text = "Comparing your spending:\n\n"
+        $text = "Spending comparison between billing periods:\n\n"
               . "• **This Month (Oct 2026):** ₹{$spentA}\n"
               . "• **Last Month (Sep 2026):** ₹{$spentB}\n\n"
               . "Your spending has **{$trend}** by ₹{$diff} (" . abs($pct) . "%).";
@@ -449,24 +578,30 @@ function answer_user_query_fallback(
             'function_called' => 'compare_periods',
             'data' => $data,
             'visualization' => build_visualization_metadata('compare_periods', $data),
+            'followups' => get_contextual_followups('compare_periods', $data, $mode),
         ];
     }
 
     if (str_contains($ql, 'budget')) {
         $data = query_budget_status($pdo, $userId);
         if (!$data['has_budgets']) {
-            return ['text' => "You haven't defined any monthly budgets yet. You can set them in the Budgets tab!"];
+            return [
+                'text' => "You have not defined monthly budgets yet. You can configure category limits in the Budgets tab.",
+                'followups' => null,
+            ];
         }
-        $text = "Here is your budget status for **{$data['month']}** (Overall: {$data['overall_percentage']}% used):\n\n";
+        $text = "Budget status for **{$data['month']}** (Overall utilization: {$data['overall_percentage']}%):\n\n";
         foreach ($data['categories'] as $c) {
-            $icon = $c['status'] === 'exceeded' ? '🔴' : ($c['status'] === 'warning' ? '🟡' : '🟢');
-            $text .= "{$icon} **{$c['category_name']}**: ₹" . number_format($c['spent'], 0) . " / ₹" . number_format($c['budgeted'], 0) . " ({$c['percentage_used']}%)\n";
+            $statusLabel = $c['status'] === 'exceeded' ? '[Exceeded]' : ($c['status'] === 'warning' ? '[Warning]' : '[On Track]');
+            $text .= "• **{$c['category_name']}**: ₹" . number_format($c['spent'], 0) . " / ₹" . number_format($c['budgeted'], 0) . " ({$c['percentage_used']}% - {$statusLabel})\n";
         }
+        $text .= "\nWould you like a breakdown of any specific category?";
         return [
             'text' => $text,
             'function_called' => 'budget_status',
             'data' => $data,
             'visualization' => build_visualization_metadata('budget_status', $data),
+            'followups' => get_contextual_followups('budget_status', $data, $mode),
         ];
     }
 
@@ -475,21 +610,21 @@ function answer_user_query_fallback(
         $dueSoon = get_due_reminders($pdo, $userId, 14);
 
         if (empty($remData['reminders'])) {
-            $text = "You don't have any reminders set yet. When you upload electronics or retail receipts, I can suggest warranties and return deadlines for you!";
+            $text = "You do not have any active reminders set. When you upload electronics or retail bills, warranty coverage and return deadlines can be automatically scheduled.";
         } else {
-            $text = "Here are your active reminders:\n\n";
+            $text = "Active Reminders and Deadlines:\n\n";
             if (!empty($dueSoon)) {
-                $text .= "⚠️ **Due Soon or Overdue:**\n";
+                $text .= "Due Soon or Overdue:\n";
                 foreach ($dueSoon as $ds) {
-                    $statusBadge = ($ds['days_remaining'] < 0) ? '🔴 Overdue' : (($ds['days_remaining'] === 0) ? '🟡 Due Today' : "🟢 In {$ds['days_remaining']} days");
+                    $statusBadge = ($ds['days_remaining'] < 0) ? 'Overdue' : (($ds['days_remaining'] === 0) ? 'Due Today' : "In {$ds['days_remaining']} days");
                     $text .= "• **{$ds['title']}** — Due {$ds['due_date']} ({$statusBadge})\n";
                 }
                 $text .= "\n";
             }
             if (!empty($remData['upcoming'])) {
-                $text .= "**Upcoming Coverage & Deadlines:**\n";
+                $text .= "Upcoming Coverage and Deadlines:\n";
                 foreach (array_slice($remData['upcoming'], 0, 5) as $up) {
-                    $text .= "• **{$up['title']}** — Expires {$up['due_date']} ({$up['days_remaining']} days left)\n";
+                    $text .= "• **{$up['title']}** — Expires {$up['due_date']} ({$up['days_remaining']} days remaining)\n";
                 }
             }
         }
@@ -497,25 +632,28 @@ function answer_user_query_fallback(
             'text' => trim($text),
             'function_called' => 'list_reminders',
             'data' => $remData,
+            'followups' => !empty($remData['reminders']) ? get_contextual_followups('list_reminders', $remData, $mode) : null,
         ];
     }
 
     if (str_contains($ql, 'recurring') || str_contains($ql, 'repeat') || str_contains($ql, 'subscription') || str_contains($ql, 'monthly bill') || str_contains($ql, 'regular')) {
         $recData = query_recurring_spend($pdo, $userId);
         if (empty($recData['recurring_items'])) {
-            $text = "I haven't detected recurring expenses yet. As you record repeat bills (like milk, rent, wifi, or fuel), they will be listed here with estimated monthly costs!";
+            $text = "No recurring expenses detected yet. Repeat purchases (such as milk, utilities, rent, or subscriptions) will be compiled here with estimated monthly commitments.";
         } else {
             $totalEst = number_format($recData['total_estimated_monthly'], 2);
-            $text = "Here are your detected recurring expenses (Estimated Monthly: **₹{$totalEst}**):\n\n";
+            $text = "Identified Recurring Expenses (Estimated Monthly Commitment: **₹{$totalEst}**):\n\n";
             foreach (array_slice($recData['recurring_items'], 0, 6) as $r) {
                 $cost = number_format($r['avg_monthly_cost'], 2);
-                $text .= "• **{$r['item_name']}** ({$r['frequency']}) — ~₹{$cost}/mo &bull; Next expected: {$r['next_expected_date']}\n";
+                $text .= "• **{$r['item_name']}** ({$r['frequency']}) — ~₹{$cost}/mo — Next expected: {$r['next_expected_date']}\n";
             }
+            $text .= "\nWould you like to review price trends for any of these repeating items?";
         }
         return [
             'text' => trim($text),
             'function_called' => 'recurring_spend',
             'data' => $recData,
+            'followups' => !empty($recData['recurring_items']) ? get_contextual_followups('recurring_spend', $recData, $mode) : null,
         ];
     }
 
@@ -543,9 +681,10 @@ function answer_user_query_fallback(
             $curTot = number_format($curSummary['total_spent'], 2);
 
             return [
-                'text' => "You don't have enough spending history recorded yet to evaluate whether you are spending a lot compared to your normal habits. So far this month ({$curSummary['period']}), you have recorded {$bLabel} totaling **₹{$curTot}**. As you upload more receipts across multiple months, I will be able to benchmark your spending trends and alert you to unusual spikes.",
+                'text' => "You don't have enough spending history recorded yet to evaluate whether you are spending a lot compared to your normal habits. So far this month ({$curSummary['period']}), you have recorded {$bLabel} totaling **₹{$curTot}**. As you upload additional receipts across consecutive months, benchmark analysis will identify variations and spending trends.",
                 'function_called' => 'get_spend_summary',
                 'data' => $curSummary,
+                'followups' => null,
             ];
         }
 
@@ -564,12 +703,12 @@ function answer_user_query_fallback(
             $warnBudget = array_filter($bgt['categories'], fn($c) => $c['status'] === 'warning');
             if (!empty($overBudget)) {
                 $overNames = implode(', ', array_map(fn($c) => $c['category_name'], $overBudget));
-                $bgtText = "\n\n⚠️ You have **exceeded your budget** in: {$overNames}.";
+                $bgtText = "\n\nNotice: You have **exceeded your budget** in: {$overNames}.";
             } elseif (!empty($warnBudget)) {
                 $warnNames = implode(', ', array_map(fn($c) => $c['category_name'], $warnBudget));
-                $bgtText = "\n\n⚠️ You are approaching 80% of your budget limit in: {$warnNames}.";
+                $bgtText = "\n\nNotice: You are approaching 80% of your budget limit in: {$warnNames}.";
             } else {
-                $bgtText = "\n\n✅ All your categories are currently within their monthly budgets.";
+                $bgtText = "\n\nAll categories are currently within their monthly budget limits.";
             }
         }
 
@@ -577,7 +716,7 @@ function answer_user_query_fallback(
             $verdict = "Yes, your spending is trending higher this month.";
             $explanation = "You have spent **₹{$spentA}** this month compared to **₹{$spentB}** last month (an increase of **₹{$diff}** or **{$pct}%**).";
         } elseif ($trend === 'decreased') {
-            $verdict = "No, you are actually spending less this month!";
+            $verdict = "No, your spending is lower this month.";
             $explanation = "You have spent **₹{$spentA}** this month compared to **₹{$spentB}** last month (a decrease of **₹{$diff}** or **{$pct}%**).";
         } else {
             $verdict = "Your spending is steady.";
@@ -585,10 +724,11 @@ function answer_user_query_fallback(
         }
 
         return [
-            'text' => "{$verdict}\n\n{$explanation}{$bgtText}",
+            'text' => "{$verdict}\n\n{$explanation}{$bgtText}\n\nWould you like to examine your largest expenditures or review category allocations?",
             'function_called' => 'compare_periods',
             'data' => $comp,
             'visualization' => build_visualization_metadata('compare_periods', $comp),
+            'followups' => get_contextual_followups('compare_periods', $comp, $mode),
         ];
     }
 
@@ -596,38 +736,22 @@ function answer_user_query_fallback(
         $item = str_contains($ql, 'milk') ? 'milk' : (str_contains($ql, 'oil') ? 'oil' : 'rice');
         $data = query_price_history($pdo, $userId, $item);
         if (empty($data['history'])) {
-            return ['text' => "I couldn't find any purchases for \"{$item}\" in your recorded bills."];
+            return [
+                'text' => "No purchase records found for \"{$item}\" in your recorded bills. Upload receipts containing {$item} to begin price tracking.",
+                'followups' => null,
+            ];
         }
         $cheapest = $data['cheapest_at'];
-        $text = "For **{$item}**, the cheapest store is **{$cheapest['merchant']}** at ₹{$cheapest['price']} on {$cheapest['date']}.\n\n"
-              . "Latest recorded price is ₹{$data['latest_price']}.";
+        $text = "Price analysis for **{$item}**:\n\n"
+              . "• Lowest recorded price: **{$cheapest['merchant']}** at ₹{$cheapest['price']} on {$cheapest['date']}.\n"
+              . "• Latest recorded price: ₹{$data['latest_price']}.\n\n"
+              . "Purchasing from {$cheapest['merchant']} provides the most competitive rate based on your records.";
         return [
             'text' => $text,
             'function_called' => 'price_history',
             'data' => $data,
             'visualization' => build_visualization_metadata('price_history', $data),
-        ];
-    }
-
-    if (str_contains($ql, 'reminder') || str_contains($ql, 'warranty') || str_contains($ql, 'deadline') || str_contains($ql, 'due date') || str_contains($ql, 'expir')) {
-        $remData = query_list_reminders_for_chat($pdo, $userId);
-        $totalCount = $remData['total_count'];
-        if ($totalCount === 0) {
-            return [
-                'text' => "You don't have any active warranty or return deadlines saved. You can add one from the Reminders tab or when saving an electronics or apparel bill!",
-                'function_called' => 'list_reminders',
-                'data' => $remData,
-            ];
-        }
-        $text = "Here are your active reminders and deadlines ({$totalCount}):\n\n";
-        foreach ($remData['reminders'] as $r) {
-            $statusIcon = $r['status'] === 'overdue' ? '🔴' : ($r['status'] === 'due_soon' ? '⚠️' : '⏰');
-            $text .= "{$statusIcon} **{$r['title']}** — Due: {$r['due_date']} ({$r['days_remaining']})\n";
-        }
-        return [
-            'text' => $text,
-            'function_called' => 'list_reminders',
-            'data' => $remData,
+            'followups' => get_contextual_followups('price_history', $data, $mode),
         ];
     }
 
@@ -636,12 +760,13 @@ function answer_user_query_fallback(
         $totalCount = (int)($remData['counts']['total'] ?? count($remData['reminders'] ?? []));
         if ($totalCount === 0) {
             return [
-                'text' => "You have **no pending payables or supplier dues** recorded. When you save supplier invoices with credit terms (e.g. Net-15 or Net-30), payment deadlines will appear here.",
+                'text' => "You have **no pending payables or supplier dues** recorded. When you save supplier invoices with credit terms (such as Net-15 or Net-30), payment deadlines will appear here.",
                 'function_called' => 'list_reminders',
                 'data' => $remData,
+                'followups' => null,
             ];
         }
-        $text = "Here are your pending supplier payables and due dates ({$totalCount}):\n\n";
+        $text = "Pending supplier payables and due dates ({$totalCount}):\n\n";
         foreach ($remData['reminders'] as $r) {
             $text .= "• **{$r['title']}** — Due: {$r['due_date']} ({$r['days_remaining']})\n";
         }
@@ -649,6 +774,7 @@ function answer_user_query_fallback(
             'text' => $text,
             'function_called' => 'list_reminders',
             'data' => $remData,
+            'followups' => get_contextual_followups('list_reminders', $remData, $mode),
         ];
     }
 
@@ -672,13 +798,16 @@ function answer_user_query_fallback(
         if ($count === 0) {
             $text = "No tax invoices or bills recorded for this month yet. Upload supplier invoices or purchase bills to compute your GST and tax breakdown.";
         } else {
-            $text = "Here is your GST & Tax summary for this month across **{$count} bill(s)**:\n\n"
+            $text = "GST and Tax Summary for current month across **{$count} bill(s)**:\n\n"
                   . "• **Taxable Value (Subtotal):** ₹{$totalSub}\n"
                   . "• **Total GST / Tax Paid:** ₹{$totalTax}\n"
                   . "• **Gross Total:** ₹{$totalGrand}\n\n"
-                  . "You can export the full line items CSV in Settings to claim your Input Tax Credit (ITC).";
+                  . "You can export the full line items CSV in Settings for Input Tax Credit (ITC) reconciliation.";
         }
-        return ['text' => $text];
+        return [
+            'text' => $text,
+            'followups' => ($count > 0) ? get_contextual_followups('get_spend_summary', [], $mode) : null,
+        ];
     }
 
     if (str_contains($ql, 'wholesale') || str_contains($ql, 'supplier') || str_contains($ql, 'distributor')) {
@@ -694,37 +823,19 @@ function answer_user_query_fallback(
         $suppliers = $merchStmt->fetchAll();
 
         if (empty($suppliers)) {
-            $text = "You haven't recorded any supplier or wholesale purchase bills yet. Upload an invoice to start tracking distributor rates!";
+            $text = "You have not recorded any supplier or wholesale purchase bills yet. Upload an invoice to begin vendor procurement tracking.";
         } else {
-            $text = "Here are your top suppliers and wholesale vendors:\n\n";
+            $text = "Top suppliers and wholesale vendors by total spend:\n\n";
             foreach ($suppliers as $s) {
                 $tot = number_format((float)$s['total_amount'], 2);
                 $avg = number_format((float)$s['avg_order'], 2);
-                $text .= "• **{$s['merchant_name']}**: ₹{$tot} across {$s['bill_count']} orders (Avg: ₹{$avg})\n";
+                $text .= "• **{$s['merchant_name']}**: ₹{$tot} across {$s['bill_count']} orders (Average: ₹{$avg})\n";
             }
-        }
-        return ['text' => $text];
-    }
-
-    if (str_contains($ql, 'recurring') || str_contains($ql, 'repeat') || str_contains($ql, 'subscription') || str_contains($ql, 'regularly')) {
-        $recData = query_recurring_spend($pdo, $userId);
-        if (empty($recData['items'])) {
-            return [
-                'text' => "I haven't detected recurring repeat purchases yet (e.g. daily milk, monthly rent, or broadband subscriptions). As you record multiple bills, I will automatically calculate your repeating monthly commitments.",
-                'function_called' => 'recurring_spend',
-                'data' => $recData,
-            ];
-        }
-        $totRec = number_format((float)$recData['total_recurring_monthly'], 2);
-        $text = "Based on your bills, your estimated recurring expenses total **₹{$totRec}/month**:\n\n";
-        foreach ($recData['items'] as $item) {
-            $cost = number_format((float)$item['estimated_monthly_cost'], 2);
-            $text .= "• **{$item['item_name']}**: ~₹{$cost}/mo ({$item['frequency']}) — Next expected: {$item['next_expected_date']}\n";
+            $text .= "\nWould you like to review pending payables or compare unit costs?";
         }
         return [
             'text' => $text,
-            'function_called' => 'recurring_spend',
-            'data' => $recData,
+            'followups' => !empty($suppliers) ? get_contextual_followups('list_bills', [], $mode) : null,
         ];
     }
 
@@ -734,12 +845,23 @@ function answer_user_query_fallback(
         $data = query_get_spend_summary($pdo, $userId, $period, $cat);
         $tot = number_format($data['total_spent'], 2);
         $txLabel = $data['bill_count'] === 1 ? '1 transaction' : "{$data['bill_count']} transactions";
-        $text = "In {$data['period']}, you spent **₹{$tot}** on {$cat} across {$txLabel}.";
+        $text = "In {$data['period']}, expenditure on **{$cat}** was **₹{$tot}** across {$txLabel}.\n\nWould you like to examine specific item prices or review your monthly category limit?";
         return [
             'text' => $text,
             'function_called' => 'get_spend_summary',
             'data' => $data,
             'visualization' => build_visualization_metadata('get_spend_summary', $data),
+            'followups' => get_contextual_followups('get_spend_summary', $data, $mode),
+        ];
+    }
+
+    // If user's query has no financial or spending intent, return guidance with no followups
+    $hasFinancialIntent = preg_match('/(spend|spending|expense|bill|cost|total|summary|month|bought|purchase|where\s+did|how\s+much|overview|breakdown|category|categories|rupee|rs|inr)/i', $ql);
+    if (!$hasFinancialIntent) {
+        return [
+            'text' => "I am your SpendSense financial intelligence assistant. I can help analyze your expenses, bills, category budgets, and store price trends. You may ask a spending question, e.g. \"Where did I spend the most this month?\" or \"Show my 5 biggest bills\".",
+            'function_called' => null,
+            'followups' => null,
         ];
     }
 
@@ -751,14 +873,17 @@ function answer_user_query_fallback(
     $topCat = !empty($data['category_breakdown']) ? $data['category_breakdown'][0]['category_name'] : 'Groceries';
     $topCatSpend = !empty($data['category_breakdown']) ? number_format((float)$data['category_breakdown'][0]['category_spend'], 2) : '0';
 
-    $text = "In **{$data['period']}**, your total spending is **₹{$tot}** across {$bLabel}.\n\n"
-          . "Your highest expenditure was on **{$topCat}** (₹{$topCatSpend}).";
+    $text = "Summary of expenditure for **{$data['period']}**:\n\n"
+          . "Total spending is **₹{$tot}** across {$bLabel}.\n\n"
+          . "Largest category expenditure: **{$topCat}** (₹{$topCatSpend}).\n\n"
+          . "Would you like to compare these figures against last month or review your category budgets?";
 
     return [
         'text' => $text,
         'function_called' => 'get_spend_summary',
         'data' => $data,
         'visualization' => build_visualization_metadata('get_spend_summary', $data),
+        'followups' => ($data['bill_count'] > 0) ? get_contextual_followups('get_spend_summary', $data, $mode) : null,
     ];
 }
 
