@@ -76,11 +76,10 @@ service cloud.firestore {
     }
 
     function isValidUser(data) {
-      return data.keys().hasOnly(['email', 'full_name', 'currency', 'usage_type', 'created_at', 'updated_at']) &&
-             (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
-             (!('full_name' in data) || (data.full_name is string && data.full_name.size() <= 100)) &&
-             (!('currency' in data) || (data.currency is string && data.currency.size() <= 10)) &&
-             (!('usage_type' in data) || (data.usage_type in ['personal', 'family', 'shop']));
+      return (!('email' in data) || data.email == null || (data.email is string && data.email.size() <= 150)) &&
+             (!('full_name' in data) || data.full_name == null || (data.full_name is string && data.full_name.size() <= 150)) &&
+             (!('currency' in data) || data.currency == null || (data.currency is string && data.currency.size() <= 10)) &&
+             (!('usage_type' in data) || data.usage_type == null || (data.usage_type is string && data.usage_type.size() <= 50));
     }
 
     function isValidBill(data) {

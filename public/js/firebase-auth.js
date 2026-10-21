@@ -37,32 +37,20 @@ async function syncUserWithBackendAndFirestore(firebaseUser, extraProfile = {}) 
     const currency = extraProfile.currency || 'INR';
     const usageType = extraProfile.usage_type || 'personal';
 
-    // 1. Ensure Firestore user document exists
+    // 1. Ensure Firestore user document exists via atomic setDoc merge
     try {
         const userDocRef = doc(db, 'users', uid);
-        const userDocSnap = await getDoc(userDocRef);
-
-        if (!userDocSnap.exists()) {
-            await setDoc(userDocRef, {
-                email: email,
-                full_name: fullName,
-                currency: currency,
-                usage_type: usageType,
-                created_at: serverTimestamp(),
-                updated_at: serverTimestamp()
-            });
-        } else {
-            const data = userDocSnap.data();
-            if (extraProfile.currency || extraProfile.usage_type) {
-                await setDoc(userDocRef, {
-                    currency: extraProfile.currency || data.currency || currency,
-                    usage_type: extraProfile.usage_type || data.usage_type || usageType,
-                    updated_at: serverTimestamp()
-                }, { merge: true });
-            }
-        }
+        await setDoc(userDocRef, {
+            email: email,
+            full_name: fullName,
+            currency: currency,
+            usage_type: usageType,
+            created_at: serverTimestamp(),
+            updated_at: serverTimestamp()
+        }, { merge: true });
+        console.log('Firestore user document synced successfully for UID:', uid);
     } catch (firestoreErr) {
-        console.warn('Firestore user profile sync warning (will fallback to backend):', firestoreErr);
+        console.error('Firestore user profile sync error:', firestoreErr);
     }
 
     // 2. Synchronize with backend session API
@@ -166,6 +154,13 @@ export function initAuthListener(onUserChanged) {
         currentFirebaseUser = firebaseUser;
         if (firebaseUser) {
             try {
+                // If user was just signed in or registered with explicit profile, avoid overwriting with defaults
+                if (currentAppUser && currentAppUser.user && (currentAppUser.user.id === firebaseUser.uid || currentAppUser.user.firebase_uid === firebaseUser.uid)) {
+                    if (typeof onUserChanged === 'function') {
+                        onUserChanged(currentAppUser);
+                    }
+                    return;
+                }
                 const appData = await syncUserWithBackendAndFirestore(firebaseUser);
                 if (typeof onUserChanged === 'function') {
                     onUserChanged(appData);
